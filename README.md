@@ -14,6 +14,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
    - `POSTGRES_*` and `DB_*`: use the same values so Django can reach Postgres.
    - `CADDY_DOMAIN`: FQDN you’ll expose (e.g., `poker.abrace.eu`).
    - `CADDY_TLS`: set to `internal` for a self-signed cert (works with Cloudflare “Full” mode) or to an email so Caddy can request a public cert.
+   - Optionally override `CADDY_HTTP_PORT`/`CADDY_HTTPS_PORT` if 80/443 are already used on your host.
    - Leave `GUNICORN_WORKERS` at 4 unless you tune it for CPU cores.
 
 > Keep `.env` out of source control. Only `.env.example` is tracked.
@@ -41,7 +42,7 @@ docker compose logs -f web   # follow Django logs
 
 ### Deployment workflow
 1. Push changes to GitHub (`main` or release branch).
-2. On the server, pull new commits and run `docker compose pull && docker compose up -d --build web caddy`.
+2. On the server run `./scripts/deploy.sh` (it pulls git, updates images, rebuilds `web`, and restarts the stack). Use `bash scripts/deploy.sh` if your shell doesn’t execute it directly.
 3. Confirm health via `docker compose ps` and hit `/health` once you add one.
 
 This layout keeps Django stateless, uses Postgres for durable data, Redis for future caching/queues, and Caddy for encrypted ingress so it’s ready to sit behind Cloudflare in production.

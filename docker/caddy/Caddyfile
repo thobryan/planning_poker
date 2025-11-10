@@ -5,18 +5,15 @@
     }
 }
 
-{$CADDY_DOMAIN}:443 {
+(common_routes) {
     encode gzip zstd
-    tls {$CADDY_TLS}
 
-    @static path /static/* /favicon.ico /robots.txt
-    handle @static {
+    handle_path /static/* {
         root * /srv/static
         file_server
     }
 
-    @media path /media/*
-    handle @media {
+    handle_path /media/* {
         root * /srv/media
         file_server
     }
@@ -24,4 +21,13 @@
     handle {
         reverse_proxy web:8000
     }
+}
+
+{$CADDY_DOMAIN}:80 {
+    import common_routes
+}
+
+{$CADDY_DOMAIN}:443 {
+    import common_routes
+    tls {$CADDY_TLS}
 }
