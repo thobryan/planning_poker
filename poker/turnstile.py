@@ -10,7 +10,11 @@ VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 
 
 def is_configured() -> bool:
-    return bool(settings.TURNSTILE_SITE_KEY and settings.TURNSTILE_SECRET_KEY)
+    return bool(
+        getattr(settings, "TURNSTILE_ENABLED", False)
+        and settings.TURNSTILE_SITE_KEY
+        and settings.TURNSTILE_SECRET_KEY
+    )
 
 
 def verify_turnstile(response_token: Optional[str], remote_ip: Optional[str] = None) -> bool:

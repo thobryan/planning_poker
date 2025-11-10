@@ -208,5 +208,6 @@ EMAIL_USE_TLS = _env_bool(os.getenv("EMAIL_USE_TLS"))
 EMAIL_USE_SSL = _env_bool(os.getenv("EMAIL_USE_SSL"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Planning Poker <no-reply@localhost>")
 
-TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY")
-TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY")
+TURNSTILE_ENABLED = os.getenv("TURNSTILE_ENABLED", "true").lower() == "true"
+TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY") if TURNSTILE_ENABLED else ""
+TURNSTILE_SECRET_KEY = os.getenv("TURNSTILE_SECRET_KEY") if TURNSTILE_ENABLED else ""
