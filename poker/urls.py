@@ -17,6 +17,7 @@ urlpatterns = [
     path("story/<int:story_id>/delete", views.delete_story, name="delete_story"),
 
     path("room/<str:code>/delete", views.delete_room, name="delete_room"),
+    path("room/<str:code>/rename", views.rename_room, name="rename_room"),
     path("room/<str:code>/leave", views.leave_room, name="leave_room"),
     path("auth/login", views.org_login, name="org_login"),
     path("auth/logout", views.org_logout, name="org_logout"),

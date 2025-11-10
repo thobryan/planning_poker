@@ -8,7 +8,16 @@
   <div class="flex flex-wrap items-center justify-between gap-4">
     <div>
       <p class="text-xs uppercase tracking-[0.5em] text-brand-light">Room</p>
-      <h2 class="text-3xl font-semibold text-white">{{ room.name }}</h2>
+      <div class="flex flex-wrap items-center gap-3">
+        <h2 class="text-3xl font-semibold text-white">{{ room.name }}</h2>
+        {% if can_manage_room %}
+          <button type="button"
+                  class="rounded-full border border-white/20 px-3 py-1 text-xs text-white/80 hover:border-white/60"
+                  onclick="document.getElementById('rename-modal').showModal()">
+            Rename
+          </button>
+        {% endif %}
+      </div>
       <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-200">
         <span class="rounded-full border border-white/20 px-3 py-1 font-mono text-brand-light">Code {{ room.code }}</span>
         <span class="rounded-full border border-white/20 px-3 py-1 text-slate-200">
@@ -45,9 +54,31 @@
           </form>
         {% endif %}
       {% endif %}
+      {% if request.user.is_authenticated and request.user.is_staff and not (participant and participant.is_facilitator) %}
+        <form method="post" action="{% url 'poker:delete_room' room.code %}" onsubmit="return confirm('Delete this room and all its stories?');">
+          {% csrf_token %}
+          <button class="rounded-2xl border border-red-500/60 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10">
+            Delete room (staff)
+          </button>
+        </form>
+      {% endif %}
     </div>
   </div>
 </section>
+
+{% if can_manage_room %}
+  <dialog id="rename-modal" class="rounded-3xl border border-white/10 bg-slate-900/95 p-6 text-white backdrop:bg-black/60">
+    <form method="post" action="{% url 'poker:rename_room' room.code %}" class="space-y-4">
+      {% csrf_token %}
+      {{ rename_form.name.label_tag }}
+      {{ rename_form.name }}
+      <div class="flex gap-3">
+        <button class="rounded-2xl bg-brand px-4 py-2 text-sm font-semibold text-white">Update</button>
+        <button type="button" class="rounded-2xl border border-white/30 px-4 py-2 text-sm" onclick="document.getElementById('rename-modal').close()">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+{% endif %}
 
 <div class="mt-6 grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
   <div class="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl shadow-slate-900/20"

@@ -19,7 +19,14 @@ from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .emails import send_org_access_token
-from .forms import JiraSettingsForm, JoinForm, OrgAccessForm, RoomForm, StoryForm
+from .forms import (
+    JiraSettingsForm,
+    JoinForm,
+    OrgAccessForm,
+    RoomForm,
+    RoomRenameForm,
+    StoryForm,
+)
 from .models import CARD_SETS, Participant, Room, Story, Vote
 from .turnstile import is_configured as turnstile_configured, verify_turnstile
 
@@ -103,6 +110,9 @@ def _room_context(request, room: Room) -> dict:
     participant = current_participant(request, room)
     stories = list(room.stories.all())
     cards = CARD_SETS.get(room.card_set, CARD_SETS["fibonacci"])
+    can_manage = bool(
+        (participant and participant.is_facilitator) or (request.user.is_authenticated and request.user.is_staff)
+    )
 
     # annotate selected vote for highlight
     for st in stories:
@@ -118,6 +128,7 @@ def _room_context(request, room: Room) -> dict:
         "stories": stories,
         "cards": cards,
         "story_form": StoryForm(),
+        "can_manage_room": can_manage,
     }
 
 
@@ -190,6 +201,7 @@ def join_room(request, code: str):
 def room_detail(request, code: str):
     room = get_object_or_404(Room, code=code)
     ctx = _room_context(request, room)
+    ctx["rename_form"] = RoomRenameForm(instance=room)
     return render(request, "poker/room_detail.html", ctx)
 
 
@@ -311,8 +323,9 @@ def delete_room(request, code: str):
     participant = current_participant(request, room)
     if request.method != "POST":
         return HttpResponseBadRequest("POST only")
-    if not facilitator_required(participant):
-        return HttpResponseForbidden("Facilitator only")
+    user_is_admin = request.user.is_authenticated and request.user.is_staff
+    if not (facilitator_required(participant) or user_is_admin):
+        return HttpResponseForbidden("Facilitator or staff only")
     room.delete()
     return redirect("poker:room_list")
 
@@ -325,6 +338,25 @@ def leave_room(request, code: str):
     if participant:
         participant.delete()
         messages.info(request, "You have left the room.")
+    return redirect("poker:room_detail", code=room.code)
+
+
+@require_POST
+def rename_room(request, code: str):
+    room = get_object_or_404(Room, code=code)
+    participant = current_participant(request, room)
+    user_is_admin = request.user.is_authenticated and request.user.is_staff
+    if not (facilitator_required(participant) or user_is_admin):
+        return HttpResponseForbidden("Facilitator or staff only")
+
+    form = RoomRenameForm(request.POST, instance=room)
+    if form.is_valid():
+        form.save()
+        messages.success(request, "Room renamed.")
+    else:
+        for error in form.errors.get("name", []):
+            messages.error(request, error)
+
     return redirect("poker:room_detail", code=room.code)
 
 

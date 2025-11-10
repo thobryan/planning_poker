@@ -9,3 +9,4 @@ admin.site.register(Story)
 admin.site.register(Vote)
 
 admin.site.login_form = TurnstileAdminAuthenticationForm
+admin.site.login_template = "admin/login.html"

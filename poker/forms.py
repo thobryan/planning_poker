@@ -142,3 +142,13 @@ class TurnstileAdminAuthenticationForm(AdminAuthenticationForm):
             if not verify_turnstile(token, getattr(self.request, "META", {}).get("REMOTE_ADDR")):
                 raise forms.ValidationError(self.error_messages["turnstile"], code="turnstile")
         return cleaned_data
+class RoomRenameForm(forms.ModelForm):
+    class Meta:
+        model = Room
+        fields = ["name"]
+        widgets = {
+            "name": forms.TextInput(
+                attrs={"class": INPUT_BASE, "placeholder": "New room name", "required": True}
+            )
+        }
+        labels = {"name": "Room name"}
