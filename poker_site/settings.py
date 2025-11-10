@@ -40,11 +40,19 @@ ALLOWED_HOSTS = _split_env_list(os.getenv("DJANGO_ALLOWED_HOSTS")) or [
     "localhost",
     "127.0.0.1",
 ]
-CSRF_TRUSTED_ORIGINS = _split_env_list(os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS"))
+
+default_csrf_trusted = ["http://localhost", "http://127.0.0.1"] if DEBUG else []
+CSRF_TRUSTED_ORIGINS = _split_env_list(os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS")) or default_csrf_trusted
+
+def _env_bool(value: str | None, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
-secure_cookies = os.getenv("DJANGO_SECURE_COOKIES", str(not DEBUG)).lower() == "true"
+secure_cookies = _env_bool(os.getenv("DJANGO_SECURE_COOKIES"), default=not DEBUG)
 CSRF_COOKIE_SECURE = secure_cookies
 SESSION_COOKIE_SECURE = secure_cookies
 
@@ -66,6 +74,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'poker.middleware.OrgAccessMiddleware',
 ]
 
 ROOT_URLCONF = 'poker_site.urls'
@@ -178,3 +187,22 @@ MEDIA_ROOT = BASE_DIR / "media"
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+ORG_ALLOWED_EMAIL_DOMAIN = os.getenv("ORG_ALLOWED_EMAIL_DOMAIN", "welltech.com")
+ORG_ACCESS_EXEMPT_URLNAMES = [
+    "org_login",
+    "org_logout",
+]
+ORG_ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("ORG_ACCESS_TOKEN_TTL_SECONDS", "600"))
+
+EMAIL_BACKEND = os.getenv("EMAIL_BACKEND")
+if not EMAIL_BACKEND:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = os.getenv("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "25"))
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = _env_bool(os.getenv("EMAIL_USE_TLS"))
+EMAIL_USE_SSL = _env_bool(os.getenv("EMAIL_USE_SSL"))
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Planning Poker <no-reply@localhost>")

@@ -1,6 +1,10 @@
 # poker/views.py
 from __future__ import annotations
 
+import random
+from datetime import timedelta
+from urllib.parse import quote
+
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -9,11 +13,65 @@ from django.http import HttpResponseBadRequest, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 
-from .forms import JiraSettingsForm, JoinForm, RoomForm, StoryForm
+from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
+
+from .emails import send_org_access_token
+from .forms import JiraSettingsForm, JoinForm, OrgAccessForm, RoomForm, StoryForm
 from .models import CARD_SETS, Participant, Room, Story, Vote
 
 
 # ============================== helpers ====================================
+
+TOKEN_SESSION_KEY = "org_pending_token"
+
+
+def _next_or_home(request):
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(candidate, allowed_hosts={request.get_host()}):
+        return candidate
+    return reverse("poker:room_list")
+
+
+def _requested_next(request) -> str:
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if candidate and url_has_allowed_host_and_scheme(candidate, allowed_hosts={request.get_host()}):
+        return candidate
+    return ""
+
+
+def _generate_access_token() -> str:
+    return f"{random.randint(0, 999999):06d}"
+
+
+def _set_pending_token(request, email: str, token: str):
+    expires_at = (timezone.now() + timedelta(seconds=settings.ORG_ACCESS_TOKEN_TTL_SECONDS)).timestamp()
+    request.session[TOKEN_SESSION_KEY] = {"email": email, "token": token, "expires_at": expires_at}
+
+
+def _get_pending_token(request):
+    data = request.session.get(TOKEN_SESSION_KEY)
+    if not data:
+        return None
+    expires_at = data.get("expires_at", 0)
+    if timezone.now().timestamp() > expires_at:
+        request.session.pop(TOKEN_SESSION_KEY, None)
+        return None
+    return data
+
+
+def _clear_pending_token(request):
+    request.session.pop(TOKEN_SESSION_KEY, None)
+
+
+def _org_login_redirect(next_url: str | None = None):
+    url = reverse("poker:org_login")
+    if next_url:
+        url = f"{url}?next={quote(next_url)}"
+    return redirect(url)
+
 
 def current_participant(request, room: Room) -> Participant | None:
     pid = request.session.get(f"p_{room.code}")
@@ -246,6 +304,89 @@ def delete_room(request, code: str):
         return HttpResponseForbidden("Facilitator only")
     room.delete()
     return redirect("poker:room_list")
+
+
+@require_POST
+def leave_room(request, code: str):
+    room = get_object_or_404(Room, code=code)
+    participant = current_participant(request, room)
+    request.session.pop(f"p_{room.code}", None)
+    if participant:
+        participant.delete()
+        messages.info(request, "You have left the room.")
+    return redirect("poker:room_detail", code=room.code)
+
+
+def org_login(request):
+    if request.session.get("org_email"):
+        return redirect(_next_or_home(request))
+
+    if request.GET.get("reset_token") == "1":
+        _clear_pending_token(request)
+
+    pending = _get_pending_token(request)
+    token_required = bool(pending)
+    initial = {"email": pending["email"]} if pending else None
+    form = OrgAccessForm(request.POST or None, token_required=token_required, initial=initial)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if token_required and action == "resend" and pending:
+            new_token = _generate_access_token()
+            sent = send_org_access_token(pending["email"], new_token)
+            if sent or settings.DEBUG:
+                _set_pending_token(request, pending["email"], new_token)
+                if settings.DEBUG:
+                    messages.info(request, f"[dev] Verification code: {new_token}")
+                messages.info(request, f"We sent a new code to {pending['email']}.")
+            else:
+                messages.error(request, "We could not send the code. Contact an administrator.")
+            return _org_login_redirect(_requested_next(request))
+
+        if form.is_valid():
+            if token_required and pending:
+                if form.cleaned_data["email"] != pending["email"]:
+                    form.add_error("email", "Use the same email address that requested the code.")
+                elif form.cleaned_data["token"] != pending["token"]:
+                    form.add_error("token", "That code is incorrect or has expired.")
+                else:
+                    _clear_pending_token(request)
+                    request.session["org_email"] = pending["email"]
+                    messages.success(request, "Access granted. Welcome to planning mode!")
+                    return redirect(_next_or_home(request))
+            else:
+                email = form.cleaned_data["email"]
+                token = _generate_access_token()
+                sent = send_org_access_token(email, token)
+                if sent or settings.DEBUG:
+                    _set_pending_token(request, email, token)
+                    if settings.DEBUG:
+                        messages.info(request, f"[dev] Verification code: {token}")
+                    messages.info(request, f"We sent a 6-digit code to {email}.")
+                    return _org_login_redirect(_requested_next(request))
+                form.add_error(None, "We could not send the verification code. Contact an administrator.")
+
+    context = {
+        "form": form,
+        "allowed_domain": settings.ORG_ALLOWED_EMAIL_DOMAIN,
+        "token_required": token_required,
+        "pending_email": pending["email"] if pending else "",
+        "token_expires_in": settings.ORG_ACCESS_TOKEN_TTL_SECONDS,
+        "token_expires_minutes": max(settings.ORG_ACCESS_TOKEN_TTL_SECONDS // 60, 1),
+        "next_param": _requested_next(request),
+    }
+    return render(request, "poker/org_login.html", context)
+
+
+@require_POST
+def org_logout(request):
+    for key in list(request.session.keys()):
+        if key.startswith("p_"):
+            request.session.pop(key, None)
+    request.session.pop("org_email", None)
+    _clear_pending_token(request)
+    messages.info(request, "Signed out. See you soon!")
+    return redirect("poker:org_login")
 
 
 # ======================= auto-update partial endpoints =====================

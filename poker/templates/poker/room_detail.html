@@ -1,47 +1,67 @@
 {% extends 'poker/base.html' %}
 {% block content %}
+<a href="{% url 'poker:room_list' %}" class="inline-flex items-center gap-2 text-sm text-brand-light hover:text-white">
+  ← Back to rooms
+</a>
 
-<nav class="mb-4 text-sm">
-  <a href="{% url 'poker:room_list' %}" class="text-indigo-600 hover:underline">← Back to Rooms</a>
-</nav>
-
-<div class="flex items-center justify-between mb-3">
-  <div>
-    <div class="text-xl font-semibold">{{ room.name }}</div>
-    <div class="text-sm text-slate-500">Code: {{ room.code }}</div>
-  </div>
-  <div class="flex items-center gap-2">
-    {% if not participant %}
-      <a class="px-3 py-2 rounded bg-indigo-600 text-white" href="{% url 'poker:join_room' room.code %}">Join</a>
-    {% else %}
-      <div class="text-sm">Hi, <strong>{{ participant.display_name }}</strong>{% if participant.is_facilitator %} (Facilitator){% endif %}</div>
-      {% if participant.is_facilitator %}
-        <form method="post" action="{% url 'poker:delete_room' room.code %}" onsubmit="return confirm('Delete this room and all its stories?');">
+<section class="mt-4 rounded-3xl border border-white/15 bg-white/5 p-6 shadow-xl backdrop-blur">
+  <div class="flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <p class="text-xs uppercase tracking-[0.5em] text-brand-light">Room</p>
+      <h2 class="text-3xl font-semibold text-white">{{ room.name }}</h2>
+      <div class="mt-2 flex flex-wrap items-center gap-3 text-sm text-slate-200">
+        <span class="rounded-full border border-white/20 px-3 py-1 font-mono text-brand-light">Code {{ room.code }}</span>
+        <span class="rounded-full border border-white/20 px-3 py-1 text-slate-200">
+          Deck: {{ room.card_set|capfirst }}
+        </span>
+        <button type="button"
+                class="rounded-full border border-white/20 px-3 py-1 text-xs text-slate-100 hover:border-white"
+                onclick="navigator.clipboard.writeText('{{ room.code }}'); this.innerText='Copied!'; setTimeout(()=>this.innerText='Copy code',2000);">
+          Copy code
+        </button>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      {% if not participant %}
+        <a class="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-slate-900 shadow-md shadow-white/30" href="{% url 'poker:join_room' room.code %}">
+          Join room
+        </a>
+      {% else %}
+        <span class="rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm text-white">
+          Hi {{ participant.display_name }}{% if participant.is_facilitator %} · Facilitator{% endif %}
+        </span>
+        <form method="post" action="{% url 'poker:leave_room' room.code %}">
           {% csrf_token %}
-          <button class="px-3 py-2 rounded border border-red-600 text-red-600 hover:bg-red-50">Delete Room</button>
+          <button class="rounded-2xl border border-white/30 px-4 py-2 text-sm text-white/80 hover:border-white/50">
+            Leave room
+          </button>
         </form>
+        {% if participant.is_facilitator %}
+          <form method="post" action="{% url 'poker:delete_room' room.code %}" onsubmit="return confirm('Delete this room and all its stories?');">
+            {% csrf_token %}
+            <button class="rounded-2xl border border-red-500/60 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10">
+              Delete room
+            </button>
+          </form>
+        {% endif %}
       {% endif %}
-    {% endif %}
+    </div>
   </div>
-</div>
+</section>
 
-<div class="grid md:grid-cols-3 gap-4">
-
-  <!-- STORIES panel (auto-updates every 2s) -->
-  <div class="md:col-span-2 p-4 bg-white rounded-xl shadow"
+<div class="mt-6 grid gap-6 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+  <div class="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl shadow-slate-900/20"
        hx-get="{% url 'poker:room_stories_partial' room.code %}"
        hx-trigger="load, every 2s"
        hx-swap="innerHTML">
     {% include 'poker/partials/_stories.html' %}
   </div>
 
-  <!-- SIDEBAR panel (auto-updates every 5s) -->
-  <div class="p-4 bg-white rounded-xl shadow"
+  <div class="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-xl shadow-slate-900/20"
        hx-get="{% url 'poker:room_sidebar_partial' room.code %}"
        hx-trigger="load, every 5s"
        hx-swap="innerHTML">
     {% include 'poker/partials/_sidebar.html' %}
   </div>
 </div>
-
 {% endblock %}

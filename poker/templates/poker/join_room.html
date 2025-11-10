@@ -1,15 +1,58 @@
 {% extends 'poker/base.html' %}
 {% block content %}
-<nav class="mb-4 text-sm">
-  <a href="{% url 'poker:room_list' %}" class="text-indigo-600 hover:underline">← Back to Rooms</a>
-</nav>
+<a href="{% url 'poker:room_list' %}" class="inline-flex items-center gap-2 text-sm text-brand-light hover:text-white">
+  ← Back to rooms
+</a>
 
-<div class="p-4 bg-white rounded-xl shadow max-w-md">
-  <h2 class="font-semibold mb-2">Join {{ room.name }} ({{ room.code }})</h2>
-  <form method="post" class="space-y-2">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button class="px-3 py-2 rounded bg-indigo-600 text-white">Join</button>
-  </form>
+<div class="mt-4 grid gap-6 md:grid-cols-[1fr_0.8fr]">
+  <div class="rounded-3xl border border-white/15 bg-white/5 p-6 shadow-lg backdrop-blur">
+    <p class="text-sm uppercase tracking-[0.4em] text-brand-light">Join room</p>
+    <h2 class="mt-2 text-3xl font-semibold text-white">{{ room.name }}</h2>
+    <p class="text-sm text-slate-200">Use code <span class="font-mono text-brand-light">{{ room.code }}</span></p>
+    <form method="post" class="mt-6 space-y-4">
+      {% csrf_token %}
+      {% if form.non_field_errors %}
+        <p class="rounded-xl bg-red-400/10 px-3 py-2 text-sm text-red-100">{{ form.non_field_errors|join:", " }}</p>
+      {% endif %}
+      {% for field in form %}
+        {% if field.field.widget.input_type == "checkbox" %}
+          <label class="flex items-center gap-3 text-sm font-medium text-slate-200">
+            {{ field }}
+            <span>{{ field.label }}</span>
+          </label>
+        {% else %}
+          <label class="block space-y-2 text-sm font-medium text-slate-200">
+            {{ field.label }}
+            {{ field }}
+          </label>
+        {% endif %}
+        {% for error in field.errors %}
+          <p class="text-xs text-red-200">{{ error }}</p>
+        {% endfor %}
+      {% endfor %}
+      <button class="w-full rounded-2xl bg-brand px-4 py-2.5 text-base font-semibold text-white shadow-lg shadow-brand/40 transition hover:bg-brand-dark">
+        Enter room
+      </button>
+    </form>
+  </div>
+
+  <div class="rounded-3xl bg-white/90 p-6 text-slate-900 shadow-xl">
+    <h3 class="text-xl font-semibold">Why we ask for names</h3>
+    <p class="mt-2 text-sm text-slate-600">Your display name keeps vote history human and ensures facilitators can follow up on questions. Facilitators get access to reveal and cleanup actions after the session.</p>
+    <ul class="mt-4 space-y-3 text-sm text-slate-600">
+      <li class="flex items-start gap-2">
+        <span class="mt-1 size-2 rounded-full bg-brand"></span>
+        Toggle “I’m facilitating” to unlock reveal / revote actions.
+      </li>
+      <li class="flex items-start gap-2">
+        <span class="mt-1 size-2 rounded-full bg-brand"></span>
+        Votes are anonymous until the facilitator reveals them.
+      </li>
+      <li class="flex items-start gap-2">
+        <span class="mt-1 size-2 rounded-full bg-brand"></span>
+        Leaving the room removes your vote history automatically.
+      </li>
+    </ul>
+  </div>
 </div>
 {% endblock %}

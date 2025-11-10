@@ -4,14 +4,33 @@
   <a href="{% url 'poker:room_detail' room.code %}" class="text-indigo-600 hover:underline">← Back to Room</a>
 </nav>
 
-<div class="max-w-xl p-4 bg-white rounded-xl shadow">
-  <h2 class="text-lg font-semibold mb-3">Jira Settings for {{ room.name }}</h2>
-  <form method="post" class="space-y-3">
+<div class="max-w-2xl rounded-3xl bg-white/95 p-6 text-slate-900 shadow-xl shadow-slate-900/10">
+  <h2 class="text-2xl font-semibold text-slate-900 mb-1">Jira Settings for {{ room.name }}</h2>
+  <p class="text-sm text-slate-500 mb-4">Connect this room to Jira so you can import issues and fetch sprints.</p>
+  <form method="post" class="space-y-4">
     {% csrf_token %}
-    {{ form.as_p }}
-    <div class="flex gap-2">
-      <button class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
-      <a class="px-3 py-2 rounded border" href="{% url 'poker:room_detail' room.code %}">Cancel</a>
+    {% if form.non_field_errors %}
+      <p class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{{ form.non_field_errors|join:", " }}</p>
+    {% endif %}
+    {% for field in form %}
+      <label class="block text-sm font-medium text-slate-700 space-y-2">
+        <span>{{ field.label }}</span>
+        {{ field }}
+        {% if field.help_text %}
+          <p class="text-xs text-slate-500">{{ field.help_text }}</p>
+        {% endif %}
+        {% for error in field.errors %}
+          <p class="text-xs text-red-600">{{ error }}</p>
+        {% endfor %}
+      </label>
+    {% endfor %}
+    <div class="flex flex-wrap gap-3">
+      <button class="rounded-2xl bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand/40 transition hover:bg-brand-dark">
+        Save settings
+      </button>
+      <a class="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50" href="{% url 'poker:room_detail' room.code %}">
+        Cancel
+      </a>
     </div>
   </form>
 </div>
