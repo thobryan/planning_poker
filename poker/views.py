@@ -172,11 +172,14 @@ def room_list(request):
 
 def room_create(request):
     if request.method != "POST":
-        return HttpResponseBadRequest("POST only")
+        messages.info(request, "Use the form below to create a room.")
+        return redirect("poker:room_list")
+
     form = RoomForm(request.POST)
     if form.is_valid():
         room = form.save()
         return redirect("poker:room_detail", code=room.code)
+
     rooms = Room.objects.order_by("-created_at")[:50]
     return render(request, "poker/room_list.html", {"rooms": rooms, "form": form})
 
