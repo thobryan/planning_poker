@@ -1,0 +1,51 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% trans 'Log in' %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">{{ site_header|default:_('Django administration') }}</h1>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  {% if form.errors and not form.non_field_errors %}
+    <p class="errornote">{% trans "Please correct the error below." %}</p>
+  {% endif %}
+  {% if form.non_field_errors %}
+    {% for error in form.non_field_errors %}
+      <p class="errornote">{{ error }}</p>
+    {% endfor %}
+  {% endif %}
+  <form method="post" id="login-form" novalidate>
+    {% csrf_token %}
+    <div class="form-row">
+      {{ form.username.errors }}
+      <label for="{{ form.username.id_for_label }}">{% trans 'Username' %}:</label>
+      {{ form.username }}
+    </div>
+    <div class="form-row">
+      {{ form.password.errors }}
+      <label for="{{ form.password.id_for_label }}">{% trans 'Password' %}:</label>
+      {{ form.password }}
+      <input type="hidden" name="next" value="{{ next }}">
+    </div>
+    {% if TURNSTILE_SITE_KEY %}
+      <div class="form-row">
+        <div class="cf-turnstile" data-sitekey="{{ TURNSTILE_SITE_KEY }}" data-theme="light"></div>
+      </div>
+    {% endif %}
+    <div class="submit-row">
+      <input type="submit" value="{% trans 'Log in' %}">
+    </div>
+  </form>
+  <div id="content-footer">
+    <p class="help">{% trans "Please enter the correct username and password for a staff account. Note that both fields may be case-sensitive." %}</p>
+  </div>
+</div>
+{% if TURNSTILE_SITE_KEY %}
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+{% endif %}
+{% endblock %}

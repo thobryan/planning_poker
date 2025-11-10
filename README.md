@@ -14,6 +14,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
    - `POSTGRES_*` and `DB_*`: use the same values so Django can reach Postgres.
    - `DJANGO_ALLOWED_HOSTS` / `DJANGO_CSRF_TRUSTED_ORIGINS`: keep `localhost,127.0.0.1` for dev and append `poker.abrace.eu` (or your domain) for prod.
    - `DJANGO_DEBUG` + `DJANGO_SECURE_COOKIES`: set `DJANGO_DEBUG=True` / `DJANGO_SECURE_COOKIES=False` locally; flip them back for prod.
+   - `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile credentials used on `/auth/login` and `/admin/login`. Leave them blank to disable (not recommended in prod).
    - `ORG_ALLOWED_EMAIL_DOMAIN`: default `welltech.com`. Update if your org uses a different workspace domain.
    - `ORG_ACCESS_TOKEN_TTL_SECONDS`: how long a login token remains valid (defaults to 600 seconds).
    - `CADDY_DOMAIN`: use `localhost` for dev; change to `poker.abrace.eu` (or whatever FQDN you pointed at the server) for prod.
@@ -30,6 +31,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
   - Keep `CADDY_DOMAIN=localhost` (the env file already publishes 8080/8443 so Docker avoids privileged ports) or skip Caddy and run `python manage.py runserver`.
   - `ORG_ALLOWED_EMAIL_DOMAIN` can be blank if you don’t want to enforce @welltech.com locally.
   - MailHog now ships in the compose stack (`mailhog` service). Use the defaults (`EMAIL_HOST=mailhog`, `EMAIL_PORT=1025`) to capture OTP emails locally at http://localhost:8025. Prefer the console backend if you don’t want MailHog running, but if you change `EMAIL_BACKEND` to SMTP without a listener you’ll hit “Connection refused”.
+  - The org login and Django admin screens include a Cloudflare Turnstile challenge; the provided keys work locally too. If you remove them from `.env`, Turnstile checks are skipped.
 - **Production (`poker.abrace.eu`)**
   - Set `DJANGO_DEBUG=False`, `DJANGO_SECURE_COOKIES=True`, and restrict `DJANGO_ALLOWED_HOSTS` / `DJANGO_CSRF_TRUSTED_ORIGINS` to your public host.
   - Point `CADDY_DOMAIN` at `poker.abrace.eu`, change `CADDY_HTTP_PORT`/`CADDY_HTTPS_PORT` back to 80/443 (or your ingress ports), and set `CADDY_TLS` to either an email (for Let’s Encrypt) or a path to a Cloudflare origin cert.
@@ -40,6 +42,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
 - Users hit `/auth/login`, enter their work email, and receive a 6-digit token via the configured email backend. The token lifetime is controlled by `ORG_ACCESS_TOKEN_TTL_SECONDS`.
 - The login form then prompts for the token. A correct token stores `org_email` in the session; the middleware (`poker/middleware.py`) requires this for every view.
 - Users can resend the code or switch emails without refreshing manually. Logging out clears both the session and any pending tokens.
+- Both `/auth/login` and `/admin/login` are protected by Cloudflare Turnstile—make sure the site & secret keys are valid in production so users can authenticate.
 
 > Keep `.env` out of source control. Only `.env.example` is tracked.
 

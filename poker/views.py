@@ -21,6 +21,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from .emails import send_org_access_token
 from .forms import JiraSettingsForm, JoinForm, OrgAccessForm, RoomForm, StoryForm
 from .models import CARD_SETS, Participant, Room, Story, Vote
+from .turnstile import is_configured as turnstile_configured, verify_turnstile
 
 
 # ============================== helpers ====================================
@@ -71,6 +72,16 @@ def _org_login_redirect(next_url: str | None = None):
     if next_url:
         url = f"{url}?next={quote(next_url)}"
     return redirect(url)
+
+
+def _turnstile_valid(request) -> bool:
+    if not turnstile_configured():
+        return True
+    token = request.POST.get("cf-turnstile-response")
+    if verify_turnstile(token, request.META.get("REMOTE_ADDR")):
+        return True
+    messages.error(request, "Please complete the verification challenge.")
+    return False
 
 
 def current_participant(request, room: Room) -> Participant | None:
@@ -331,7 +342,8 @@ def org_login(request):
 
     if request.method == "POST":
         action = request.POST.get("action")
-        if token_required and action == "resend" and pending:
+        turnstile_ok = _turnstile_valid(request)
+        if turnstile_ok and token_required and action == "resend" and pending:
             new_token = _generate_access_token()
             sent = send_org_access_token(pending["email"], new_token)
             if sent or settings.DEBUG:
@@ -343,7 +355,7 @@ def org_login(request):
                 messages.error(request, "We could not send the code. Contact an administrator.")
             return _org_login_redirect(_requested_next(request))
 
-        if form.is_valid():
+        if turnstile_ok and form.is_valid():
             if token_required and pending:
                 if form.cleaned_data["email"] != pending["email"]:
                     form.add_error("email", "Use the same email address that requested the code.")
@@ -374,6 +386,7 @@ def org_login(request):
         "token_expires_in": settings.ORG_ACCESS_TOKEN_TTL_SECONDS,
         "token_expires_minutes": max(settings.ORG_ACCESS_TOKEN_TTL_SECONDS // 60, 1),
         "next_param": _requested_next(request),
+        "turnstile_enabled": turnstile_configured(),
     }
     return render(request, "poker/org_login.html", context)
 
