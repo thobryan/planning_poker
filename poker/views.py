@@ -8,16 +8,25 @@ from urllib.parse import quote
 import requests
 from requests.auth import HTTPBasicAuth
 
-from django.contrib import messages
-from django.http import HttpResponseBadRequest, HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_GET, require_POST
-
 from django.conf import settings
+from django.contrib import messages
+from django.core.cache import cache
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_GET, require_POST
 
+from .cache_utils import (
+    ROOM_LIST_CACHE_KEY,
+    ROOM_PARTIAL_TTL,
+    get_room_snapshot,
+    invalidate_room_cache,
+    invalidate_room_list,
+    room_fragment_cache_key,
+)
 from .emails import send_org_access_token
 from .forms import (
     JiraSettingsForm,
@@ -34,6 +43,8 @@ from .turnstile import is_configured as turnstile_configured, verify_turnstile
 # ============================== helpers ====================================
 
 TOKEN_SESSION_KEY = "org_pending_token"
+OTP_RATE_LIMIT = 3
+OTP_RATE_WINDOW_SECONDS = 60
 
 
 def _next_or_home(request):
@@ -57,6 +68,18 @@ def _generate_access_token() -> str:
 def _set_pending_token(request, email: str, token: str):
     expires_at = (timezone.now() + timedelta(seconds=settings.ORG_ACCESS_TOKEN_TTL_SECONDS)).timestamp()
     request.session[TOKEN_SESSION_KEY] = {"email": email, "token": token, "expires_at": expires_at}
+
+
+def _otp_rate_limited(email: str) -> bool:
+    key = f"otp:rate:{email.lower()}"
+    count = cache.get(key)
+    if count is None:
+        cache.set(key, 1, timeout=OTP_RATE_WINDOW_SECONDS)
+        return False
+    if count >= OTP_RATE_LIMIT:
+        return True
+    cache.incr(key)
+    return False
 
 
 def _get_pending_token(request):
@@ -105,14 +128,24 @@ def facilitator_required(participant: Participant | None) -> bool:
     return bool(participant and participant.is_facilitator)
 
 
-def _room_context(request, room: Room) -> dict:
+def _room_context(
+    request,
+    room: Room,
+    snapshot: dict | None = None,
+    version: int | None = None,
+    participant: Participant | None = None,
+) -> dict:
     """Build the same context used across full and partial renders."""
-    participant = current_participant(request, room)
-    stories = list(room.stories.all())
-    cards = CARD_SETS.get(room.card_set, CARD_SETS["fibonacci"])
-    can_manage = bool(
-        (participant and participant.is_facilitator) or (request.user.is_authenticated and request.user.is_staff)
-    )
+    participant = participant or current_participant(request, room)
+    if snapshot is None or version is None:
+        snapshot, version = get_room_snapshot(room)
+
+    stories = snapshot["stories"]
+    cards = snapshot["cards"]
+    user_is_staff = request.user.is_authenticated and request.user.is_staff
+    participant_is_facilitator = bool(participant and participant.is_facilitator)
+    can_manage = bool(participant_is_facilitator or user_is_staff)
+    staff_can_delete = bool(user_is_staff and not participant_is_facilitator)
 
     # annotate selected vote for highlight
     for st in stories:
@@ -129,6 +162,8 @@ def _room_context(request, room: Room) -> dict:
         "cards": cards,
         "story_form": StoryForm(),
         "can_manage_room": can_manage,
+        "staff_can_delete": staff_can_delete,
+        "cache_version": version,
     }
 
 
@@ -160,12 +195,16 @@ def _render_story(request, story: Story):
 # ============================== core views =================================
 
 def room_list(request):
-    rooms = Room.objects.order_by("-created_at")[:50]
+    rooms = cache.get(ROOM_LIST_CACHE_KEY)
+    if rooms is None:
+        rooms = list(Room.objects.order_by("-created_at")[:50])
+        cache.set(ROOM_LIST_CACHE_KEY, rooms, 30)
     form = RoomForm()
     if request.method == "POST":
         form = RoomForm(request.POST)
         if form.is_valid():
             room = form.save()
+            invalidate_room_list()
             return redirect("poker:room_detail", code=room.code)
     return render(request, "poker/room_list.html", {"rooms": rooms, "form": form})
 
@@ -178,6 +217,7 @@ def room_create(request):
     form = RoomForm(request.POST)
     if form.is_valid():
         room = form.save()
+        invalidate_room_list()
         return redirect("poker:room_detail", code=room.code)
 
     rooms = Room.objects.order_by("-created_at")[:50]
@@ -195,6 +235,7 @@ def join_room(request, code: str):
                 is_facilitator=form.cleaned_data.get("is_facilitator", False),
             )
             request.session[f"p_{room.code}"] = p.id
+            invalidate_room_cache(room)
             return redirect("poker:room_detail", code=room.code)
     else:
         form = JoinForm()
@@ -219,6 +260,7 @@ def story_create(request, code: str):
             s = form.save(commit=False)
             s.room = room
             s.save()
+            invalidate_room_cache(room)
 
     # HTMX? re-render stories panel so the new story appears without jumping
     if _is_htmx(request):
@@ -242,6 +284,7 @@ def cast_vote(request, story_id: int):
         return HttpResponseBadRequest("Missing value")
 
     Vote.objects.update_or_create(story=story, participant=participant, defaults={"value": value})
+    invalidate_room_cache(room)
 
     if _is_htmx(request):
         return _render_story(request, story)
@@ -259,6 +302,7 @@ def reveal_votes(request, pk: int):
 
     story.revealed = True
     story.save(update_fields=["revealed"])
+    invalidate_room_cache(story.room)
 
     if _is_htmx(request):
         return _render_story(request, story)
@@ -278,6 +322,7 @@ def revote_story(request, pk: int):
     story.consensus_value = ""
     story.save(update_fields=["revealed", "consensus_value"])
     story.votes.all().delete()
+    invalidate_room_cache(story.room)
 
     if _is_htmx(request):
         return _render_story(request, story)
@@ -295,6 +340,7 @@ def set_consensus(request, pk: int):
 
     story.consensus_value = request.POST.get("consensus", "")
     story.save(update_fields=["consensus_value"])
+    invalidate_room_cache(story.room)
 
     if _is_htmx(request):
         return _render_story(request, story)
@@ -312,6 +358,7 @@ def delete_story(request, story_id: int):
 
     room = story.room
     story.delete()
+    invalidate_room_cache(room)
 
     # For HTMX: refresh stories panel (keeps scroll position; list shrinks gracefully)
     if _is_htmx(request):
@@ -330,6 +377,7 @@ def delete_room(request, code: str):
     if not (facilitator_required(participant) or user_is_admin):
         return HttpResponseForbidden("Facilitator or staff only")
     room.delete()
+    invalidate_room_list()
     return redirect("poker:room_list")
 
 
@@ -341,6 +389,7 @@ def leave_room(request, code: str):
     if participant:
         participant.delete()
         messages.info(request, "You have left the room.")
+        invalidate_room_cache(room)
     return redirect("poker:room_detail", code=room.code)
 
 
@@ -355,6 +404,8 @@ def rename_room(request, code: str):
     form = RoomRenameForm(request.POST, instance=room)
     if form.is_valid():
         form.save()
+        invalidate_room_cache(room)
+        invalidate_room_list()
         messages.success(request, "Room renamed.")
     else:
         for error in form.errors.get("name", []):
@@ -379,6 +430,9 @@ def org_login(request):
         action = request.POST.get("action")
         turnstile_ok = _turnstile_valid(request)
         if turnstile_ok and token_required and action == "resend" and pending:
+            if _otp_rate_limited(pending["email"]):
+                messages.error(request, "Too many verification attempts. Please wait a minute.")
+                return _org_login_redirect(_requested_next(request))
             new_token = _generate_access_token()
             sent = send_org_access_token(pending["email"], new_token)
             if sent or settings.DEBUG:
@@ -403,6 +457,22 @@ def org_login(request):
                     return redirect(_next_or_home(request))
             else:
                 email = form.cleaned_data["email"]
+                if _otp_rate_limited(email):
+                    form.add_error(None, "Too many verification attempts. Please wait a minute.")
+                    return render(
+                        request,
+                        "poker/org_login.html",
+                        {
+                            "form": form,
+                            "allowed_domain": settings.ORG_ALLOWED_EMAIL_DOMAIN,
+                            "token_required": token_required,
+                            "pending_email": pending["email"] if pending else "",
+                            "token_expires_in": settings.ORG_ACCESS_TOKEN_TTL_SECONDS,
+                            "token_expires_minutes": max(settings.ORG_ACCESS_TOKEN_TTL_SECONDS // 60, 1),
+                            "next_param": _requested_next(request),
+                            "turnstile_enabled": turnstile_configured(),
+                        },
+                    )
                 token = _generate_access_token()
                 sent = send_org_access_token(email, token)
                 if sent or settings.DEBUG:
@@ -442,15 +512,31 @@ def org_logout(request):
 @require_GET
 def room_stories_partial(request, code: str):
     room = get_object_or_404(Room, code=code)
-    ctx = _room_context(request, room)
-    return render(request, "poker/partials/_stories.html", ctx)
+    participant = current_participant(request, room)
+    snapshot, version = get_room_snapshot(room)
+    participant_id = participant.id if participant else "anon"
+    cache_key = room_fragment_cache_key(room.id, "stories", version, participant_id)
+    html = cache.get(cache_key)
+    if html is None:
+        ctx = _room_context(request, room, snapshot=snapshot, version=version, participant=participant)
+        html = render_to_string("poker/partials/_stories.html", ctx, request=request)
+        cache.set(cache_key, html, ROOM_PARTIAL_TTL)
+    return HttpResponse(html)
 
 
 @require_GET
 def room_sidebar_partial(request, code: str):
     room = get_object_or_404(Room, code=code)
-    ctx = _room_context(request, room)
-    return render(request, "poker/partials/_sidebar.html", ctx)
+    participant = current_participant(request, room)
+    snapshot, version = get_room_snapshot(room)
+    participant_id = participant.id if participant else "anon"
+    cache_key = room_fragment_cache_key(room.id, "sidebar", version, participant_id)
+    html = cache.get(cache_key)
+    if html is None:
+        ctx = _room_context(request, room, snapshot=snapshot, version=version, participant=participant)
+        html = render_to_string("poker/partials/_sidebar.html", ctx, request=request)
+        cache.set(cache_key, html, ROOM_PARTIAL_TTL)
+    return HttpResponse(html)
 
 
 # ============================== Jira integration ===========================

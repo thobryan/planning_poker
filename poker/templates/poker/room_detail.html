@@ -54,7 +54,7 @@
           </form>
         {% endif %}
       {% endif %}
-      {% if request.user.is_authenticated and request.user.is_staff and not (participant and participant.is_facilitator) %}
+      {% if staff_can_delete %}
         <form method="post" action="{% url 'poker:delete_room' room.code %}" onsubmit="return confirm('Delete this room and all its stories?');">
           {% csrf_token %}
           <button class="rounded-2xl border border-red-500/60 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10">

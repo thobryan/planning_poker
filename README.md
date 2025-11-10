@@ -31,7 +31,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
   - Leave the provided `localhost` entries in `DJANGO_ALLOWED_HOSTS` and `DJANGO_CSRF_TRUSTED_ORIGINS`.
   - Keep `CADDY_DOMAIN=localhost` (the env file already publishes 8080/8443 so Docker avoids privileged ports) or skip Caddy and run `python manage.py runserver`.
   - `ORG_ALLOWED_EMAIL_DOMAIN` can be blank if you don’t want to enforce @welltech.com locally.
-  - MailHog now ships in the compose stack (`mailhog` service). Use the defaults (`EMAIL_HOST=mailhog`, `EMAIL_PORT=1025`) to capture OTP emails locally at http://localhost:8025. Prefer the console backend if you don’t want MailHog running, but if you change `EMAIL_BACKEND` to SMTP without a listener you’ll hit “Connection refused”.
+  - MailHog now ships behind the optional `dev` profile (`docker compose --profile dev up mailhog`). Use the defaults (`EMAIL_HOST=mailhog`, `EMAIL_PORT=1025`) to capture OTP emails locally at http://localhost:8025. Prefer the console backend if you don’t want MailHog running, but if you change `EMAIL_BACKEND` to SMTP without a listener you’ll hit “Connection refused”.
   - The org login and Django admin screens include a Cloudflare Turnstile challenge; the provided keys work locally too. If you remove them from `.env`, Turnstile checks are skipped.
 - **Production (`poker.abrace.eu`)**
   - Set `DJANGO_DEBUG=False`, `DJANGO_SECURE_COOKIES=True`, and restrict `DJANGO_ALLOWED_HOSTS` / `DJANGO_CSRF_TRUSTED_ORIGINS` to your public host.
@@ -44,6 +44,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
 - The login form then prompts for the token. A correct token stores `org_email` in the session; the middleware (`poker/middleware.py`) requires this for every view.
 - Users can resend the code or switch emails without refreshing manually. Logging out clears both the session and any pending tokens.
 - Both `/auth/login` and `/admin/login` are protected by Cloudflare Turnstile—make sure the site & secret keys are valid in production so users can authenticate.
+- Redis backs the default cache and session store. Room detail payloads, HTMX fragments, and room lists are cached automatically and invalidated whenever stories or participants change. OTP delivery is rate limited (3 codes per minute per email) via Redis counters.
 
 > Keep `.env` out of source control. Only `.env.example` is tracked.
 

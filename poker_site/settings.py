@@ -214,6 +214,9 @@ ADMINS = [
     ("Planning Poker Alerts", ERROR_REPORT_EMAIL),
 ]
 
+SESSION_ENGINE = "django.contrib.sessions.backends.cache"
+SESSION_CACHE_ALIAS = "default"
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
