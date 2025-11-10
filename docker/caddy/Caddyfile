@@ -1,0 +1,27 @@
+{
+    auto_https disable_redirects
+    servers {
+        protocols h1 h2
+    }
+}
+
+{$CADDY_DOMAIN}:443 {
+    encode gzip zstd
+    tls {$CADDY_TLS}
+
+    @static path /static/* /favicon.ico /robots.txt
+    handle @static {
+        root * /srv/static
+        file_server
+    }
+
+    @media path /media/*
+    handle @media {
+        root * /srv/media
+        file_server
+    }
+
+    handle {
+        reverse_proxy web:8000
+    }
+}
