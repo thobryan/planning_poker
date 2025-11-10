@@ -16,8 +16,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
-      mailhog:
-        condition: service_started
     volumes:
       - static_data:/app/staticfiles
       - media_data:/app/media
