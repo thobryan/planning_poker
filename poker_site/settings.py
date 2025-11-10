@@ -207,6 +207,36 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 EMAIL_USE_TLS = _env_bool(os.getenv("EMAIL_USE_TLS"))
 EMAIL_USE_SSL = _env_bool(os.getenv("EMAIL_USE_SSL"))
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Planning Poker <no-reply@localhost>")
+SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+
+ERROR_REPORT_EMAIL = os.getenv("ERROR_REPORT_EMAIL", "poker@abrace.eu")
+ADMINS = [
+    ("Planning Poker Alerts", ERROR_REPORT_EMAIL),
+]
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        }
+    },
+    "handlers": {
+        "mail_admins": {
+            "level": "ERROR",
+            "filters": ["require_debug_false"],
+            "class": "django.utils.log.AdminEmailHandler",
+        },
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["mail_admins"],
+            "level": "ERROR",
+            "propagate": True,
+        },
+    },
+}
 
 TURNSTILE_ENABLED = os.getenv("TURNSTILE_ENABLED", "true").lower() == "true"
 TURNSTILE_SITE_KEY = os.getenv("TURNSTILE_SITE_KEY") if TURNSTILE_ENABLED else ""

@@ -17,6 +17,7 @@ Production is now driven by Docker Compose so the Django app, Postgres, Redis, a
    - `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile credentials used on `/auth/login` and `/admin/login`. Leave them blank to disable (not recommended in prod).
    - `ORG_ALLOWED_EMAIL_DOMAIN`: default `welltech.com`. Update if your org uses a different workspace domain.
    - `ORG_ACCESS_TOKEN_TTL_SECONDS`: how long a login token remains valid (defaults to 600 seconds).
+   - `ERROR_REPORT_EMAIL`: address that will receive crash emails (defaults to `poker@abrace.eu`).
    - `CADDY_DOMAIN`: use `localhost` for dev; change to `poker.abrace.eu` (or whatever FQDN you pointed at the server) for prod.
    - `CADDY_TLS`: keep `internal` for a self-signed cert locally (works with Cloudflare “Full” mode) or set an ACME email / cert path for public TLS.
    - `CADDY_HTTP_PORT` / `CADDY_HTTPS_PORT`: default to 8080/8443 for localhost dev; change to 80/443 (or your preferred published ports) when deploying behind a public domain.
