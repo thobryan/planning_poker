@@ -6,8 +6,8 @@ from .models import CARD_SETS, Room, Story
 from .turnstile import is_configured as turnstile_configured, verify_turnstile
 
 INPUT_BASE = (
-    "w-full rounded-2xl border border-slate-300/70 bg-white/80 px-4 py-2.5 text-sm "
-    "shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
+    "w-full rounded-2xl border border-slate-300/70 bg-white/80 px-4 py-2.5 text-sm text-slate-900 "
+    "placeholder:text-slate-500 shadow-sm focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30 transition"
 )
 
 
