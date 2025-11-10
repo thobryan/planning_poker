@@ -1,0 +1,30 @@
+{% extends 'poker/base.html' %}
+{% block content %}
+<div class="grid md:grid-cols-2 gap-6">
+  <div class="p-4 bg-white rounded-xl shadow">
+    <h2 class="font-semibold mb-2">Create a room</h2>
+    <form method="post" action="{% url 'poker:room_create' %}" class="space-y-2">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button class="px-3 py-2 rounded bg-indigo-600 text-white">Create</button>
+    </form>
+  </div>
+
+  <div class="p-4 bg-white rounded-xl shadow">
+    <h2 class="font-semibold mb-2">Recent rooms</h2>
+    <ul class="divide-y">
+      {% for r in rooms %}
+      <li class="py-2 flex items-center justify-between">
+        <div>
+          <div class="font-medium">{{ r.name }}</div>
+          <div class="text-sm text-slate-500">Code: {{ r.code }}</div>
+        </div>
+        <a class="px-3 py-1 rounded bg-slate-200" href="{% url 'poker:room_detail' r.code %}">Open</a>
+      </li>
+      {% empty %}
+      <li class="py-2 text-slate-500">No rooms yet.</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endblock %}

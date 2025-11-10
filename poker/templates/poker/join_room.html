@@ -1,0 +1,15 @@
+{% extends 'poker/base.html' %}
+{% block content %}
+<nav class="mb-4 text-sm">
+  <a href="{% url 'poker:room_list' %}" class="text-indigo-600 hover:underline">← Back to Rooms</a>
+</nav>
+
+<div class="p-4 bg-white rounded-xl shadow max-w-md">
+  <h2 class="font-semibold mb-2">Join {{ room.name }} ({{ room.code }})</h2>
+  <form method="post" class="space-y-2">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button class="px-3 py-2 rounded bg-indigo-600 text-white">Join</button>
+  </form>
+</div>
+{% endblock %}

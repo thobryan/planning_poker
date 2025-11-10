@@ -1,0 +1,18 @@
+{% extends 'poker/base.html' %}
+{% block content %}
+<nav class="mb-4 text-sm">
+  <a href="{% url 'poker:room_detail' room.code %}" class="text-indigo-600 hover:underline">← Back to Room</a>
+</nav>
+
+<div class="max-w-xl p-4 bg-white rounded-xl shadow">
+  <h2 class="text-lg font-semibold mb-3">Jira Settings for {{ room.name }}</h2>
+  <form method="post" class="space-y-3">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <div class="flex gap-2">
+      <button class="px-3 py-2 rounded bg-indigo-600 text-white">Save</button>
+      <a class="px-3 py-2 rounded border" href="{% url 'poker:room_detail' room.code %}">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

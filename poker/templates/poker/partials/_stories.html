@@ -1,0 +1,12 @@
+<div id="stories-panel">
+  <h3 class="font-semibold mb-3">Stories</h3>
+  <ul class="space-y-3">
+    {% for s in stories %}
+      {% include 'poker/partials/_story.html' %}
+    {% empty %}
+      <li class="rounded-xl border border-dashed border-slate-300 p-6 text-slate-500">
+        No stories yet.
+      </li>
+    {% endfor %}
+  </ul>
+</div>

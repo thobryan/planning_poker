@@ -1,0 +1,47 @@
+{% extends 'poker/base.html' %}
+{% block content %}
+
+<nav class="mb-4 text-sm">
+  <a href="{% url 'poker:room_list' %}" class="text-indigo-600 hover:underline">← Back to Rooms</a>
+</nav>
+
+<div class="flex items-center justify-between mb-3">
+  <div>
+    <div class="text-xl font-semibold">{{ room.name }}</div>
+    <div class="text-sm text-slate-500">Code: {{ room.code }}</div>
+  </div>
+  <div class="flex items-center gap-2">
+    {% if not participant %}
+      <a class="px-3 py-2 rounded bg-indigo-600 text-white" href="{% url 'poker:join_room' room.code %}">Join</a>
+    {% else %}
+      <div class="text-sm">Hi, <strong>{{ participant.display_name }}</strong>{% if participant.is_facilitator %} (Facilitator){% endif %}</div>
+      {% if participant.is_facilitator %}
+        <form method="post" action="{% url 'poker:delete_room' room.code %}" onsubmit="return confirm('Delete this room and all its stories?');">
+          {% csrf_token %}
+          <button class="px-3 py-2 rounded border border-red-600 text-red-600 hover:bg-red-50">Delete Room</button>
+        </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="grid md:grid-cols-3 gap-4">
+
+  <!-- STORIES panel (auto-updates every 2s) -->
+  <div class="md:col-span-2 p-4 bg-white rounded-xl shadow"
+       hx-get="{% url 'poker:room_stories_partial' room.code %}"
+       hx-trigger="load, every 2s"
+       hx-swap="innerHTML">
+    {% include 'poker/partials/_stories.html' %}
+  </div>
+
+  <!-- SIDEBAR panel (auto-updates every 5s) -->
+  <div class="p-4 bg-white rounded-xl shadow"
+       hx-get="{% url 'poker:room_sidebar_partial' room.code %}"
+       hx-trigger="load, every 5s"
+       hx-swap="innerHTML">
+    {% include 'poker/partials/_sidebar.html' %}
+  </div>
+</div>
+
+{% endblock %}
