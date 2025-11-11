@@ -108,7 +108,9 @@ class OrgAccessForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.token_required = token_required
         if token_required:
-            self.fields["token"].required = True
+            # Allow the browser to submit “Resend code” without a token, but still
+            # enforce it server-side via clean_token when verifying.
+            self.fields["token"].required = False
             self.fields["email"].widget.attrs["readonly"] = True
 
     def clean_email(self):
