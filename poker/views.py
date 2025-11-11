@@ -158,6 +158,7 @@ def _room_context(
     return {
         "room": room,
         "participant": participant,
+        "participant_is_facilitator": participant_is_facilitator,
         "stories": stories,
         "cards": cards,
         "story_form": StoryForm(),
@@ -188,7 +189,13 @@ def _render_story(request, story: Story):
     return render(
         request,
         "poker/partials/_story.html",
-        {"room": room, "participant": p, "cards": ctx["cards"], "s": s},
+        {
+            "room": room,
+            "participant": p,
+            "participant_is_facilitator": ctx["participant_is_facilitator"],
+            "cards": ctx["cards"],
+            "s": s,
+        },
     )
 
 

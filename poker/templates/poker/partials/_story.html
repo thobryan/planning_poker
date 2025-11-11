@@ -23,7 +23,7 @@
       <span class="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white">
         {{ s.votes.count }} vote(s)
       </span>
-      {% if participant and participant.is_facilitator %}
+      {% if participant_is_facilitator %}
         <div class="flex items-center gap-2">
           {% if not s.revealed %}
             <form hx-post="{% url 'poker:reveal_votes' s.pk %}" hx-target="#story-{{ s.id }}" hx-swap="outerHTML">
@@ -75,7 +75,7 @@
           </div>
         {% endif %}
 
-        {% if participant and participant.is_facilitator %}
+        {% if participant_is_facilitator %}
           <form hx-post="{% url 'poker:set_consensus' s.pk %}"
                 hx-target="#story-{{ s.id }}" hx-swap="outerHTML"
                 class="mt-4 flex flex-wrap items-center gap-2 text-sm">

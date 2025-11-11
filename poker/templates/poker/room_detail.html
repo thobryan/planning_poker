@@ -37,7 +37,7 @@
         </a>
       {% else %}
         <span class="rounded-2xl border border-white/20 bg-white/10 px-4 py-2 text-sm text-white">
-          Hi {{ participant.display_name }}{% if participant.is_facilitator %} · Facilitator{% endif %}
+          Hi {{ participant.display_name }}{% if participant_is_facilitator %} · Facilitator{% endif %}
         </span>
         <form method="post" action="{% url 'poker:leave_room' room.code %}">
           {% csrf_token %}
@@ -45,7 +45,7 @@
             Leave room
           </button>
         </form>
-        {% if participant.is_facilitator %}
+        {% if participant_is_facilitator %}
           <form method="post" action="{% url 'poker:delete_room' room.code %}" onsubmit="return confirm('Delete this room and all its stories?');">
             {% csrf_token %}
             <button class="rounded-2xl border border-red-500/60 px-4 py-2 text-sm text-red-200 hover:bg-red-500/10">
