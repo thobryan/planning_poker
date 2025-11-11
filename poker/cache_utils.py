@@ -37,7 +37,7 @@ def get_room_snapshot(room: Room) -> Tuple[dict[str, Any], int]:
     data = cache.get(key)
     if data is None:
         data = {
-            "stories": list(room.stories.prefetch_related("votes", "participants").all()),
+            "stories": list(room.stories.prefetch_related("votes__participant").all()),
             "participants": list(room.participants.all()),
             "cards": CARD_SETS.get(room.card_set, CARD_SETS["fibonacci"]),
         }
