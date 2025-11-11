@@ -210,6 +210,8 @@ DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "Planning Poker <no-reply@l
 SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 
 ERROR_REPORT_EMAIL = os.getenv("ERROR_REPORT_EMAIL", "poker@abrace.eu")
+ERROR_EMAIL_MAX_PER_WINDOW = int(os.getenv("ERROR_EMAIL_MAX_PER_WINDOW", "10"))
+ERROR_EMAIL_WINDOW_SECONDS = int(os.getenv("ERROR_EMAIL_WINDOW_SECONDS", "300"))
 ADMINS = [
     ("Planning Poker Alerts", ERROR_REPORT_EMAIL),
 ]
@@ -229,7 +231,7 @@ LOGGING = {
         "mail_admins": {
             "level": "ERROR",
             "filters": ["require_debug_false"],
-            "class": "django.utils.log.AdminEmailHandler",
+            "class": "poker.logging_handlers.RateLimitedAdminEmailHandler",
         },
     },
     "loggers": {
