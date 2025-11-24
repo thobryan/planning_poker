@@ -39,6 +39,7 @@ class Story(models.Model):
     room = models.ForeignKey(Room, on_delete=models.CASCADE, related_name="stories")
     title = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
+    jira_issue_type = models.CharField(max_length=50, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     revealed = models.BooleanField(default=False)
     consensus_value = models.CharField(max_length=10, blank=True)

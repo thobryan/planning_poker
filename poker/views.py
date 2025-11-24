@@ -607,8 +607,8 @@ def _jira_next_sprint(room: Room, board_id: int) -> dict | None:
     return values[0]
 
 
-def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple[str, str, str]]:
-    """Return [(KEY, summary, browse_url)] filtered to room.jira_project_key."""
+def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple[str, str, str, str]]:
+    """Return [(KEY, summary, browse_url, issue_type)] filtered to room.jira_project_key."""
     auth = _jira_auth(room)
     if not auth:
         return []
@@ -617,13 +617,13 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
     try:
         search_url = f"{room.jira_base_url}/rest/api/3/search"
         jql = f'project = "{room.jira_project_key}" AND sprint = {sprint_id}'
-        out: list[tuple[str, str, str]] = []
+        out: list[tuple[str, str, str, str]] = []
 
         def page(start_at: int):
             r = requests.get(
                 search_url,
                 auth=auth,
-                params={"jql": jql, "fields": "summary", "startAt": start_at, "maxResults": 100},
+                params={"jql": jql, "fields": "summary,issuetype", "startAt": start_at, "maxResults": 100},
                 timeout=20,
             )
             r.raise_for_status()
@@ -639,16 +639,19 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
             fields = issue.get("fields", {}) or {}
             summary = fields.get("summary", "")
             browse = f"{room.jira_base_url}/browse/{key}" if key else ""
-            out.append((key, summary, browse))
+            issue_type = (fields.get("issuetype") or {}).get("name", "")
+            out.append((key, summary, browse, issue_type))
 
         while start_at + max_results < total:
             start_at += max_results
             data = page(start_at)
             for issue in data.get("issues", []):
                 key = issue.get("key", "")
-                summary = (issue.get("fields", {}) or {}).get("summary", "")
+                fields = issue.get("fields", {}) or {}
+                summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
-                out.append((key, summary, browse))
+                issue_type = (fields.get("issuetype") or {}).get("name", "")
+                out.append((key, summary, browse, issue_type))
 
         return out
 
@@ -657,7 +660,7 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
 
     # Fallback: Agile sprint issues (may include multiple projects) -> filter client-side
     issues_url = f"{room.jira_base_url}/rest/agile/1.0/sprint/{sprint_id}/issue"
-    filtered: list[tuple[str, str, str]] = []
+    filtered: list[tuple[str, str, str, str]] = []
     start = 0
     step = 50
     while True:
@@ -671,7 +674,8 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
                 key = it.get("key", "")
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
-                filtered.append((key, summary, browse))
+                issue_type = (fields.get("issuetype") or {}).get("name", "")
+                filtered.append((key, summary, browse, issue_type))
         if start + data.get("maxResults", 0) >= data.get("total", 0):
             break
         start += data.get("maxResults", 0)
@@ -719,11 +723,16 @@ def jira_import_next_sprint(request, code: str):
         issues = _jira_issues_in_sprint_for_project(room, sprint["id"])
         created = 0
         existing_titles = set(room.stories.values_list("title", flat=True))
-        for key, summary, browse_url in issues:
+        for key, summary, browse_url, issue_type in issues:
             title = f"{key} — {summary}"[:200]
             if title in existing_titles:
                 continue
-            Story.objects.create(room=room, title=title, notes=f"Issue: {key}\n{browse_url}")
+            Story.objects.create(
+                room=room,
+                title=title,
+                notes=f"Issue: {key}\n{browse_url}",
+                jira_issue_type=issue_type or "",
+            )
             created += 1
 
         if created:

@@ -1,14 +1,13 @@
 {# expects: room, participant, cards, s (Story) #}
-<li id="story-{{ s.id }}" class="rounded-3xl border border-white/15 bg-white/95 p-5 text-slate-900 shadow-xl shadow-slate-900/5">
-  <div class="flex flex-wrap items-start justify-between gap-3">
-    <div class="min-w-0 space-y-2">
-      <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">
-        <span>{{ s.created_at|date:"M d" }}</span>
-        <span>Story</span>
-      </div>
-      <h4 class="text-xl font-semibold leading-snug text-slate-900 break-words">
-        {{ s.title }}
-      </h4>
+    <li id="story-{{ s.id }}" class="rounded-3xl border border-white/15 bg-white/95 p-5 text-slate-900 shadow-xl shadow-slate-900/5">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div class="min-w-0 space-y-2">
+          <div class="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.4em] text-slate-400">
+            <span>{% if s.jira_issue_type %}{{ s.jira_issue_type }}{% else %}Story{% endif %}</span>
+          </div>
+          <h4 class="text-xl font-semibold leading-snug text-slate-900 break-words">
+            {{ s.title }}
+          </h4>
       {% if s.notes %}
         <div class="text-sm leading-relaxed text-slate-600 break-words">
           {{ s.notes|urlize|linebreaksbr }}
