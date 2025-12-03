@@ -603,8 +603,18 @@ def _jira_next_sprint(room: Room, board_id: int) -> dict | None:
     values = r.json().get("values", [])
     if not values:
         return None
-    values.sort(key=lambda s: s.get("startDate") or "9999-12-31")
-    return values[0]
+
+    # Prefer sprints created for this board. Jira may return cross-board sprints
+    # (different originBoardId) when they’re shared.
+    scoped = [s for s in values if s.get("originBoardId") == board_id]
+    candidates = scoped or values
+
+    def sort_key(s: dict):
+        # Use startDate if provided, otherwise createdDate to keep chronology stable.
+        return s.get("startDate") or s.get("createdDate") or "9999-12-31"
+
+    candidates.sort(key=sort_key)
+    return candidates[0]
 
 
 def _is_epic(issue_type: str | None) -> bool:
