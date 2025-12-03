@@ -607,6 +607,10 @@ def _jira_next_sprint(room: Room, board_id: int) -> dict | None:
     return values[0]
 
 
+def _is_epic(issue_type: str | None) -> bool:
+    return (issue_type or "").strip().lower() == "epic"
+
+
 def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple[str, str, str, str]]:
     """Return [(KEY, summary, browse_url, issue_type)] filtered to room.jira_project_key."""
     auth = _jira_auth(room)
@@ -640,6 +644,8 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
             summary = fields.get("summary", "")
             browse = f"{room.jira_base_url}/browse/{key}" if key else ""
             issue_type = (fields.get("issuetype") or {}).get("name", "")
+            if _is_epic(issue_type):
+                continue
             out.append((key, summary, browse, issue_type))
 
         while start_at + max_results < total:
@@ -651,6 +657,8 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
                 issue_type = (fields.get("issuetype") or {}).get("name", "")
+                if _is_epic(issue_type):
+                    continue
                 out.append((key, summary, browse, issue_type))
 
         return out
@@ -675,6 +683,8 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
                 issue_type = (fields.get("issuetype") or {}).get("name", "")
+                if _is_epic(issue_type):
+                    continue
                 filtered.append((key, summary, browse, issue_type))
         if start + data.get("maxResults", 0) >= data.get("total", 0):
             break
@@ -736,6 +746,7 @@ def jira_import_next_sprint(request, code: str):
             created += 1
 
         if created:
+            invalidate_room_cache(room)
             messages.success(request, f"Imported {created} issue(s) for {room.jira_project_key}.")
         else:
             messages.info(request, f"No new {room.jira_project_key} issues to import.")

@@ -37,7 +37,10 @@ def get_room_snapshot(room: Room) -> Tuple[dict[str, Any], int]:
     data = cache.get(key)
     if data is None:
         data = {
-            "stories": list(room.stories.prefetch_related("votes__participant").all()),
+            # Hide Epics so we only show sprint-sized work items in the room.
+            "stories": list(
+                room.stories.exclude(jira_issue_type__iexact="Epic").prefetch_related("votes__participant").all()
+            ),
             "participants": list(room.participants.all()),
             "cards": CARD_SETS.get(room.card_set, CARD_SETS["fibonacci"]),
         }
