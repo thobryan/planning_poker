@@ -741,6 +741,7 @@ def jira_import_next_sprint(request, code: str):
             return redirect("poker:room_detail", code=room.code)
 
         issues = _jira_issues_in_sprint_for_project(room, sprint["id"])
+        imported_keys = {key for key, *_ in issues if key}
         created = 0
         existing_titles = set(room.stories.values_list("title", flat=True))
         for key, summary, browse_url, issue_type in issues:
@@ -755,9 +756,29 @@ def jira_import_next_sprint(request, code: str):
             )
             created += 1
 
-        if created:
+        removed = 0
+        if imported_keys:
+            jira_stories = room.stories.filter(notes__startswith=f"Issue: {room.jira_project_key}-")
+            stale_ids = []
+            for st in jira_stories:
+                first_line = (st.notes or "").splitlines()[0] if st.notes else ""
+                key = first_line.replace("Issue:", "", 1).strip()
+                if key and key not in imported_keys:
+                    stale_ids.append(st.id)
+            if stale_ids:
+                removed = room.stories.filter(id__in=stale_ids).delete()[0]
+
+        if created or removed:
             invalidate_room_cache(room)
+
+        if created and removed:
+            messages.success(
+                request, f"Imported {created} and removed {removed} stale issue(s) for {room.jira_project_key}."
+            )
+        elif created:
             messages.success(request, f"Imported {created} issue(s) for {room.jira_project_key}.")
+        elif removed:
+            messages.info(request, f"Removed {removed} stale issue(s) no longer in the sprint.")
         else:
             messages.info(request, f"No new {room.jira_project_key} issues to import.")
 
