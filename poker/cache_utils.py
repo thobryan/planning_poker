@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Tuple
 
 from django.core.cache import cache
+from django.db.models import Q
 
 from .models import CARD_SETS, Room
 
@@ -36,11 +37,18 @@ def get_room_snapshot(room: Room) -> Tuple[dict[str, Any], int]:
     key = ROOM_SNAPSHOT_KEY.format(room_id=room.id, version=version)
     data = cache.get(key)
     if data is None:
+        stories_qs = room.stories.exclude(jira_issue_type__iexact="Epic")
+
+        # If this room is linked to a Jira project, suppress imported issues from other projects.
+        # Imported stories carry notes like "Issue: KEY\n{browse_url}", so we check the prefix.
+        if room.jira_project_key:
+            wrong_project = Q(notes__startswith="Issue: ") & ~Q(
+                notes__startswith=f"Issue: {room.jira_project_key}-"
+            )
+            stories_qs = stories_qs.exclude(wrong_project)
+
         data = {
-            # Hide Epics so we only show sprint-sized work items in the room.
-            "stories": list(
-                room.stories.exclude(jira_issue_type__iexact="Epic").prefetch_related("votes__participant").all()
-            ),
+            "stories": list(stories_qs.prefetch_related("votes__participant").all()),
             "participants": list(room.participants.all()),
             "cards": CARD_SETS.get(room.card_set, CARD_SETS["fibonacci"]),
         }
