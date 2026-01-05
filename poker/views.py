@@ -619,6 +619,47 @@ def _format_jira_estimate(value: object | None) -> str:
     return str(value).strip()
 
 
+def _format_jira_time_estimate(value: object | None) -> str:
+    if value is None:
+        return ""
+    try:
+        seconds = int(float(value))
+    except (TypeError, ValueError):
+        return ""
+    if seconds <= 0:
+        return ""
+    minutes = seconds // 60
+    hours = minutes // 60
+    minutes = minutes % 60
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    if minutes:
+        return f"{minutes}m"
+    return f"{seconds}s"
+
+
+def _extract_jira_time_estimate(fields: dict) -> str:
+    tracking = fields.get("timetracking") or {}
+    if isinstance(tracking, dict):
+        pretty = tracking.get("originalEstimate") or tracking.get("originalEstimateString")
+        if pretty:
+            return str(pretty).strip()
+        formatted = _format_jira_time_estimate(tracking.get("originalEstimateSeconds"))
+        if formatted:
+            return formatted
+    return _format_jira_time_estimate(fields.get("timeoriginalestimate"))
+
+
+def _extract_jira_estimate(fields: dict, estimation_field_id: str | None) -> str:
+    if not estimation_field_id:
+        return _extract_jira_time_estimate(fields)
+    if estimation_field_id in {"timeoriginalestimate", "timetracking"}:
+        return _extract_jira_time_estimate(fields)
+    return _format_jira_estimate(fields.get(estimation_field_id))
+
+
 def _jira_next_sprint(room: Room, board_id: int) -> dict | None:
     auth = _jira_auth(room)
     if not auth:
@@ -657,9 +698,12 @@ def _jira_issues_in_sprint_for_project(
     if not auth:
         return []
 
-    fields_param = "summary,issuetype"
+    fields = {"summary", "issuetype"}
     if estimation_field_id:
-        fields_param = f"{fields_param},{estimation_field_id}"
+        fields.add(estimation_field_id)
+    if estimation_field_id in (None, "timeoriginalestimate", "timetracking"):
+        fields.update({"timeoriginalestimate", "timetracking"})
+    fields_param = ",".join(sorted(fields))
 
     # Preferred: JQL (REST v3)
     try:
@@ -688,9 +732,7 @@ def _jira_issues_in_sprint_for_project(
             summary = fields.get("summary", "")
             browse = f"{room.jira_base_url}/browse/{key}" if key else ""
             issue_type = (fields.get("issuetype") or {}).get("name", "")
-            estimate = ""
-            if estimation_field_id:
-                estimate = _format_jira_estimate(fields.get(estimation_field_id))
+            estimate = _extract_jira_estimate(fields, estimation_field_id)
             if _is_epic(issue_type):
                 continue
             out.append((key, summary, browse, issue_type, estimate))
@@ -704,9 +746,7 @@ def _jira_issues_in_sprint_for_project(
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
                 issue_type = (fields.get("issuetype") or {}).get("name", "")
-                estimate = ""
-                if estimation_field_id:
-                    estimate = _format_jira_estimate(fields.get(estimation_field_id))
+                estimate = _extract_jira_estimate(fields, estimation_field_id)
                 if _is_epic(issue_type):
                     continue
                 out.append((key, summary, browse, issue_type, estimate))
@@ -738,9 +778,7 @@ def _jira_issues_in_sprint_for_project(
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
                 issue_type = (fields.get("issuetype") or {}).get("name", "")
-                estimate = ""
-                if estimation_field_id:
-                    estimate = _format_jira_estimate(fields.get(estimation_field_id))
+                estimate = _extract_jira_estimate(fields, estimation_field_id)
                 if _is_epic(issue_type):
                     continue
                 filtered.append((key, summary, browse, issue_type, estimate))

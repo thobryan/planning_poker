@@ -1,12 +1,15 @@
 from unittest.mock import patch
 
+from cryptography.fernet import Fernet
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.db import connection
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
 from .models import Participant, Room, Story
 
+TEST_FERNET_KEY = Fernet.generate_key().decode("ascii")
 
 class _StubResponse:
     def __init__(self, payload, status_code=200):
@@ -57,6 +60,7 @@ class SmokeTests(TestCase):
         self.assertIn(room.code, resp["Location"])
 
 
+@override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
 class JiraImportTests(TestCase):
     def setUp(self):
         self.client = Client()
@@ -124,3 +128,68 @@ class JiraImportTests(TestCase):
 
         detail = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
         self.assertContains(detail, "Est: 8")
+
+    @patch("poker.views.requests.get")
+    def test_jira_original_estimate_fallback(self, mock_get):
+        sprint_payload = {
+            "values": [
+                {
+                    "id": 556,
+                    "originBoardId": self.room.jira_board_id,
+                    "startDate": "2024-01-02",
+                }
+            ]
+        }
+        config_payload = {"estimation": {"type": "none"}}
+        search_payload = {
+            "total": 1,
+            "startAt": 0,
+            "maxResults": 100,
+            "issues": [
+                {
+                    "key": "ABC-2",
+                    "fields": {
+                        "summary": "Original estimate",
+                        "issuetype": {"name": "Story"},
+                        "timetracking": {
+                            "originalEstimate": "2h",
+                            "originalEstimateSeconds": 7200,
+                        },
+                        "timeoriginalestimate": 7200,
+                    },
+                }
+            ],
+        }
+        mock_get.side_effect = [
+            _StubResponse(sprint_payload),
+            _StubResponse(config_payload),
+            _StubResponse(search_payload),
+        ]
+
+        resp = self.client.post(reverse("poker:jira_import_next_sprint", args=[self.room.code]))
+        self.assertEqual(resp.status_code, 302)
+
+        story = Story.objects.get(room=self.room)
+        self.assertEqual(story.jira_estimate, "2h")
+
+        detail = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
+        self.assertContains(detail, "Est: 2h")
+
+
+@override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
+class JiraTokenEncryptionTests(TestCase):
+    def test_jira_token_encrypted_at_rest(self):
+        room = Room.objects.create(
+            name="Secure Room",
+            jira_base_url="https://jira.example",
+            jira_email="jira@example.com",
+            jira_token="super-secret",
+            jira_project_key="SEC",
+        )
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT jira_token FROM poker_room WHERE id = %s", [room.id])
+            raw = cursor.fetchone()[0]
+        self.assertNotEqual(raw, "super-secret")
+        self.assertTrue(raw.startswith("enc$"))
+        room.refresh_from_db()
+        self.assertEqual(room.jira_token, "super-secret")

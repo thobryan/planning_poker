@@ -1,4 +1,5 @@
-Django==5.2.8
+Django==5.2.9
+cryptography==42.0.8
 gunicorn==23.0.0
 psycopg[binary]==3.2.12
 redis==5.0.7

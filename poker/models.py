@@ -1,6 +1,7 @@
 from django.db import models
 from django.utils.crypto import get_random_string
 
+from .fields import EncryptedTextField
 CARD_SETS = {
     "fibonacci": ["?", "☕", "0", "1", "2", "3", "5", "8", "13", "21", "34"],
     "tshirt": ["?", "XS", "S", "M", "L", "XL"],
@@ -15,7 +16,7 @@ class Room(models.Model):
     # --- Jira integration (MVP) ---
     jira_base_url = models.URLField(blank=True, help_text="e.g. https://your-domain.atlassian.net")
     jira_email = models.CharField(max_length=200, blank=True)
-    jira_token = models.CharField(max_length=255, blank=True)  # store securely in production
+    jira_token = EncryptedTextField(blank=True)
     jira_project_key = models.CharField(max_length=32, blank=True)
     jira_board_id = models.IntegerField(null=True, blank=True)
 
