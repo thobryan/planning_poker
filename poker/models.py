@@ -19,6 +19,7 @@ class Room(models.Model):
     jira_token = EncryptedTextField(blank=True)
     jira_project_key = models.CharField(max_length=32, blank=True)
     jira_board_id = models.IntegerField(null=True, blank=True)
+    hide_estimated_stories = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if not self.code:

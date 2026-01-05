@@ -421,6 +421,25 @@ def rename_room(request, code: str):
     return redirect("poker:room_detail", code=room.code)
 
 
+@require_POST
+def toggle_estimated_filter(request, code: str):
+    room = get_object_or_404(Room, code=code)
+    participant = current_participant(request, room)
+    if not facilitator_required(participant):
+        return HttpResponseForbidden("Facilitator only")
+
+    room.hide_estimated_stories = not room.hide_estimated_stories
+    room.save(update_fields=["hide_estimated_stories"])
+    invalidate_room_cache(room)
+
+    if room.hide_estimated_stories:
+        messages.success(request, "Estimated stories are now hidden for this room.")
+    else:
+        messages.success(request, "Estimated stories are now visible for this room.")
+
+    return redirect("poker:room_detail", code=room.code)
+
+
 def org_login(request):
     if request.session.get("org_email"):
         return redirect(_next_or_home(request))

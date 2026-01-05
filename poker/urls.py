@@ -18,6 +18,7 @@ urlpatterns = [
 
     path("room/<str:code>/delete", views.delete_room, name="delete_room"),
     path("room/<str:code>/rename", views.rename_room, name="rename_room"),
+    path("room/<str:code>/filters/estimated", views.toggle_estimated_filter, name="toggle_estimated_filter"),
     path("room/<str:code>/leave", views.leave_room, name="leave_room"),
     path("auth/login", views.org_login, name="org_login"),
     path("auth/logout", views.org_logout, name="org_logout"),

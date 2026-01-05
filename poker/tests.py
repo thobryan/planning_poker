@@ -61,6 +61,32 @@ class SmokeTests(TestCase):
         self.assertIn(room.code, resp["Location"])
 
 
+class EstimateFilterTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.room = Room.objects.create(name="Filter Room")
+        self.participant = Participant.objects.create(
+            room=self.room,
+            display_name="Facilitator",
+            is_facilitator=True,
+        )
+        session = self.client.session
+        session["org_email"] = "tester@welltech.com"
+        session[f"p_{self.room.code}"] = self.participant.id
+        session.save()
+
+    def test_hide_estimated_stories_filters_room(self):
+        Story.objects.create(room=self.room, title="Has estimate", jira_estimate="3")
+        Story.objects.create(room=self.room, title="No estimate", jira_estimate="")
+
+        self.room.hide_estimated_stories = True
+        self.room.save(update_fields=["hide_estimated_stories"])
+
+        resp = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
+        self.assertContains(resp, "No estimate")
+        self.assertNotContains(resp, "Has estimate")
+
+
 @override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
 class JiraImportTests(TestCase):
     def setUp(self):

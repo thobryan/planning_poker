@@ -73,5 +73,30 @@
         </button>
       </form>
     </section>
+
+    <section class="rounded-2xl border border-amber-400/30 bg-amber-50/80 p-4 text-amber-900 shadow-inner shadow-amber-200/40">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-xs uppercase tracking-[0.4em] text-amber-500">Filters</p>
+          <h4 class="text-base font-semibold">Visibility rules</h4>
+        </div>
+        {% if room.hide_estimated_stories %}
+          <span class="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-semibold text-amber-900">On</span>
+        {% endif %}
+      </div>
+      <p class="mt-2 text-xs text-amber-800/80">Hide stories that already have a Jira estimate for everyone.</p>
+      <form method="post" action="{% url 'poker:toggle_estimated_filter' room.code %}" class="mt-3">
+        {% csrf_token %}
+        {% if room.hide_estimated_stories %}
+          <button class="w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800">
+            Show estimated issues
+          </button>
+        {% else %}
+          <button class="w-full rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-amber-400/40 transition hover:bg-amber-700">
+            Hide estimated issues
+          </button>
+        {% endif %}
+      </form>
+    </section>
   {% endif %}
 </div>

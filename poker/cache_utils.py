@@ -47,6 +47,9 @@ def get_room_snapshot(room: Room) -> Tuple[dict[str, Any], int]:
             )
             stories_qs = stories_qs.exclude(wrong_project)
 
+        if room.hide_estimated_stories:
+            stories_qs = stories_qs.filter(Q(jira_estimate__isnull=True) | Q(jira_estimate__exact=""))
+
         data = {
             "stories": list(stories_qs.prefetch_related("votes__participant").all()),
             "participants": list(room.participants.all()),
