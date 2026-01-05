@@ -3,6 +3,7 @@ from unittest.mock import patch
 from cryptography.fernet import Fernet
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ImproperlyConfigured
 from django.db import connection
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
@@ -193,3 +194,16 @@ class JiraTokenEncryptionTests(TestCase):
         self.assertTrue(raw.startswith("enc$"))
         room.refresh_from_db()
         self.assertEqual(room.jira_token, "super-secret")
+
+
+@override_settings(JIRA_TOKEN_ENCRYPTION_KEY="not-a-valid-key")
+class JiraTokenInvalidKeyTests(TestCase):
+    def test_invalid_encryption_key_raises(self):
+        with self.assertRaises(ImproperlyConfigured):
+            Room.objects.create(
+                name="Broken Key Room",
+                jira_base_url="https://jira.example",
+                jira_email="jira@example.com",
+                jira_token="super-secret",
+                jira_project_key="SEC",
+            )
