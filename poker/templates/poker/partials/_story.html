@@ -23,8 +23,8 @@
         {{ s.votes.count }} vote(s)
       </span>
       {% if s.jira_estimate %}
-        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-          Est: {{ s.jira_estimate }}
+        <span class="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800 shadow-sm">
+          Est: <span class="font-bold">{{ s.jira_estimate }}</span>
         </span>
       {% endif %}
       {% if participant_is_facilitator %}

@@ -698,7 +698,7 @@ def _jira_issues_in_sprint_for_project(
     if not auth:
         return []
 
-    fields = {"summary", "issuetype"}
+    fields = {"summary", "issuetype", "project"}
     if estimation_field_id:
         fields.add(estimation_field_id)
     if estimation_field_id in (None, "timeoriginalestimate", "timetracking"):
