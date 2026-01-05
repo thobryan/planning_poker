@@ -55,6 +55,7 @@ USE_X_FORWARDED_HOST = True
 secure_cookies = _env_bool(os.getenv("DJANGO_SECURE_COOKIES"), default=not DEBUG)
 CSRF_COOKIE_SECURE = secure_cookies
 SESSION_COOKIE_SECURE = secure_cookies
+SESSION_COOKIE_AGE = int(os.getenv("SESSION_COOKIE_AGE", "2592000"))
 
 INSTALLED_APPS = [
     'django.contrib.admin',

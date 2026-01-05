@@ -593,6 +593,32 @@ def _jira_get_board_id(room: Room) -> int | None:
     return room.jira_board_id
 
 
+def _jira_estimation_field_id(room: Room, board_id: int | None) -> str | None:
+    auth = _jira_auth(room)
+    if not auth or not board_id:
+        return None
+    url = f"{room.jira_base_url}/rest/agile/1.0/board/{board_id}/configuration"
+    try:
+        r = requests.get(url, auth=auth, timeout=15)
+        r.raise_for_status()
+    except requests.HTTPError:
+        return None
+    data = r.json() or {}
+    estimation = data.get("estimation") or {}
+    if estimation.get("type") == "none":
+        return None
+    field = estimation.get("field") or {}
+    return field.get("fieldId") or field.get("id")
+
+
+def _format_jira_estimate(value: object | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip()
+
+
 def _jira_next_sprint(room: Room, board_id: int) -> dict | None:
     auth = _jira_auth(room)
     if not auth:
@@ -621,23 +647,31 @@ def _is_epic(issue_type: str | None) -> bool:
     return (issue_type or "").strip().lower() == "epic"
 
 
-def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple[str, str, str, str]]:
-    """Return [(KEY, summary, browse_url, issue_type)] filtered to room.jira_project_key."""
+def _jira_issues_in_sprint_for_project(
+    room: Room,
+    sprint_id: int,
+    estimation_field_id: str | None = None,
+) -> list[tuple[str, str, str, str, str]]:
+    """Return [(KEY, summary, browse_url, issue_type, estimate)] filtered to room.jira_project_key."""
     auth = _jira_auth(room)
     if not auth:
         return []
+
+    fields_param = "summary,issuetype"
+    if estimation_field_id:
+        fields_param = f"{fields_param},{estimation_field_id}"
 
     # Preferred: JQL (REST v3)
     try:
         search_url = f"{room.jira_base_url}/rest/api/3/search"
         jql = f'project = "{room.jira_project_key}" AND sprint = {sprint_id}'
-        out: list[tuple[str, str, str, str]] = []
+        out: list[tuple[str, str, str, str, str]] = []
 
         def page(start_at: int):
             r = requests.get(
                 search_url,
                 auth=auth,
-                params={"jql": jql, "fields": "summary,issuetype", "startAt": start_at, "maxResults": 100},
+                params={"jql": jql, "fields": fields_param, "startAt": start_at, "maxResults": 100},
                 timeout=20,
             )
             r.raise_for_status()
@@ -654,9 +688,12 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
             summary = fields.get("summary", "")
             browse = f"{room.jira_base_url}/browse/{key}" if key else ""
             issue_type = (fields.get("issuetype") or {}).get("name", "")
+            estimate = ""
+            if estimation_field_id:
+                estimate = _format_jira_estimate(fields.get(estimation_field_id))
             if _is_epic(issue_type):
                 continue
-            out.append((key, summary, browse, issue_type))
+            out.append((key, summary, browse, issue_type, estimate))
 
         while start_at + max_results < total:
             start_at += max_results
@@ -667,9 +704,12 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
                 issue_type = (fields.get("issuetype") or {}).get("name", "")
+                estimate = ""
+                if estimation_field_id:
+                    estimate = _format_jira_estimate(fields.get(estimation_field_id))
                 if _is_epic(issue_type):
                     continue
-                out.append((key, summary, browse, issue_type))
+                out.append((key, summary, browse, issue_type, estimate))
 
         return out
 
@@ -678,11 +718,16 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
 
     # Fallback: Agile sprint issues (may include multiple projects) -> filter client-side
     issues_url = f"{room.jira_base_url}/rest/agile/1.0/sprint/{sprint_id}/issue"
-    filtered: list[tuple[str, str, str, str]] = []
+    filtered: list[tuple[str, str, str, str, str]] = []
     start = 0
     step = 50
     while True:
-        r = requests.get(issues_url, auth=auth, params={"startAt": start, "maxResults": step}, timeout=20)
+        r = requests.get(
+            issues_url,
+            auth=auth,
+            params={"startAt": start, "maxResults": step, "fields": fields_param},
+            timeout=20,
+        )
         r.raise_for_status()
         data = r.json()
         for it in data.get("issues", []):
@@ -693,9 +738,12 @@ def _jira_issues_in_sprint_for_project(room: Room, sprint_id: int) -> list[tuple
                 summary = fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
                 issue_type = (fields.get("issuetype") or {}).get("name", "")
+                estimate = ""
+                if estimation_field_id:
+                    estimate = _format_jira_estimate(fields.get(estimation_field_id))
                 if _is_epic(issue_type):
                     continue
-                filtered.append((key, summary, browse, issue_type))
+                filtered.append((key, summary, browse, issue_type, estimate))
         if start + data.get("maxResults", 0) >= data.get("total", 0):
             break
         start += data.get("maxResults", 0)
@@ -740,12 +788,35 @@ def jira_import_next_sprint(request, code: str):
             messages.info(request, "No upcoming sprint found.")
             return redirect("poker:room_detail", code=room.code)
 
-        issues = _jira_issues_in_sprint_for_project(room, sprint["id"])
+        estimation_field_id = _jira_estimation_field_id(room, board_id)
+        issues = _jira_issues_in_sprint_for_project(room, sprint["id"], estimation_field_id)
         imported_keys = {key for key, *_ in issues if key}
         created = 0
+        updated = 0
         existing_titles = set(room.stories.values_list("title", flat=True))
-        for key, summary, browse_url, issue_type in issues:
+        jira_stories = list(room.stories.filter(notes__startswith=f"Issue: {room.jira_project_key}-"))
+        jira_story_by_key = {}
+        for st in jira_stories:
+            first_line = (st.notes or "").splitlines()[0] if st.notes else ""
+            issue_key = first_line.replace("Issue:", "", 1).strip()
+            if issue_key:
+                jira_story_by_key[issue_key] = st
+
+        for key, summary, browse_url, issue_type, estimate in issues:
             title = f"{key} — {summary}"[:200]
+            existing_story = jira_story_by_key.get(key)
+            if existing_story:
+                fields_to_update = []
+                normalized_estimate = estimate or ""
+                if normalized_estimate != (existing_story.jira_estimate or ""):
+                    existing_story.jira_estimate = normalized_estimate
+                    fields_to_update.append("jira_estimate")
+                if issue_type and issue_type != existing_story.jira_issue_type:
+                    existing_story.jira_issue_type = issue_type
+                    fields_to_update.append("jira_issue_type")
+                if fields_to_update:
+                    existing_story.save(update_fields=fields_to_update)
+                    updated += 1
             if title in existing_titles:
                 continue
             Story.objects.create(
@@ -753,12 +824,12 @@ def jira_import_next_sprint(request, code: str):
                 title=title,
                 notes=f"Issue: {key}\n{browse_url}",
                 jira_issue_type=issue_type or "",
+                jira_estimate=estimate or "",
             )
             created += 1
 
         removed = 0
         if imported_keys:
-            jira_stories = room.stories.filter(notes__startswith=f"Issue: {room.jira_project_key}-")
             stale_ids = []
             for st in jira_stories:
                 first_line = (st.notes or "").splitlines()[0] if st.notes else ""
@@ -768,7 +839,7 @@ def jira_import_next_sprint(request, code: str):
             if stale_ids:
                 removed = room.stories.filter(id__in=stale_ids).delete()[0]
 
-        if created or removed:
+        if created or removed or updated:
             invalidate_room_cache(room)
 
         if created and removed:
@@ -779,6 +850,8 @@ def jira_import_next_sprint(request, code: str):
             messages.success(request, f"Imported {created} issue(s) for {room.jira_project_key}.")
         elif removed:
             messages.info(request, f"Removed {removed} stale issue(s) no longer in the sprint.")
+        elif updated:
+            messages.success(request, f"Updated {updated} issue(s) from Jira.")
         else:
             messages.info(request, f"No new {room.jira_project_key} issues to import.")
 

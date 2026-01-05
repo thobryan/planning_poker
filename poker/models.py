@@ -40,6 +40,7 @@ class Story(models.Model):
     title = models.CharField(max_length=200)
     notes = models.TextField(blank=True)
     jira_issue_type = models.CharField(max_length=50, blank=True)
+    jira_estimate = models.CharField(max_length=20, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     revealed = models.BooleanField(default=False)
     consensus_value = models.CharField(max_length=10, blank=True)
