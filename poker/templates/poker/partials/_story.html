@@ -10,7 +10,7 @@
           </h4>
       {% if s.notes %}
         <div class="text-sm leading-relaxed text-slate-600 break-words">
-          {{ s.notes|urlize|linebreaksbr }}
+          {{ s.display_notes|default:s.notes|urlize|linebreaksbr }}
         </div>
       {% endif %}
     </div>

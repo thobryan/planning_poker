@@ -20,6 +20,7 @@ class Room(models.Model):
     jira_project_key = models.CharField(max_length=32, blank=True)
     jira_board_id = models.IntegerField(null=True, blank=True)
     hide_estimated_stories = models.BooleanField(default=False)
+    show_todo_tasks_only = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if not self.code:
@@ -43,6 +44,7 @@ class Story(models.Model):
     notes = models.TextField(blank=True)
     jira_issue_type = models.CharField(max_length=50, blank=True)
     jira_estimate = models.CharField(max_length=20, blank=True)
+    jira_status_category = models.CharField(max_length=20, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     revealed = models.BooleanField(default=False)
     consensus_value = models.CharField(max_length=10, blank=True)

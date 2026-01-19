@@ -14,6 +14,15 @@ ROOM_SNAPSHOT_KEY = "room:snapshot:{room_id}:{version}"
 ROOM_LIST_CACHE_KEY = "room:list:latest"
 
 
+def _task_issue_type_filter() -> Q:
+    return (
+        Q(jira_issue_type__iexact="Task")
+        | Q(jira_issue_type__iexact="Sub-task")
+        | Q(jira_issue_type__iexact="Subtask")
+        | Q(jira_issue_type__iexact="Sub task")
+    )
+
+
 def _ensure_room_version(room_id: int) -> int:
     key = ROOM_VERSION_KEY.format(room_id=room_id)
     version = cache.get(key)
@@ -49,6 +58,12 @@ def get_room_snapshot(room: Room) -> Tuple[dict[str, Any], int]:
 
         if room.hide_estimated_stories:
             stories_qs = stories_qs.filter(Q(jira_estimate__isnull=True) | Q(jira_estimate__exact=""))
+
+        task_type_filter = _task_issue_type_filter()
+        stories_qs = stories_qs.exclude(task_type_filter & Q(jira_status_category__iexact="done"))
+
+        if room.show_todo_tasks_only:
+            stories_qs = stories_qs.filter(task_type_filter & Q(jira_status_category__iexact="to do"))
 
         data = {
             "stories": list(stories_qs.prefetch_related("votes__participant").all()),

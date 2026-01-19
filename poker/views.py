@@ -128,6 +128,27 @@ def facilitator_required(participant: Participant | None) -> bool:
     return bool(participant and participant.is_facilitator)
 
 
+def _display_story_notes(story: Story) -> str:
+    notes = story.notes or ""
+    if not notes:
+        return ""
+    lines = notes.splitlines()
+    if not lines:
+        return notes
+    first_line = lines[0].strip()
+    if first_line.lower().startswith("issue:"):
+        status = (story.jira_status_category or "").strip()
+        pretty_status = status.title() if status else "Unknown"
+        lines[0] = f"Status: {pretty_status}"
+        return "\n".join(lines)
+    return notes
+
+
+def _attach_display_notes(stories: list[Story]) -> None:
+    for st in stories:
+        st.display_notes = _display_story_notes(st)
+
+
 def _room_context(
     request,
     room: Room,
@@ -154,6 +175,8 @@ def _room_context(
         user_votes = {v.story_id: v.value for v in Vote.objects.filter(participant=participant, story__in=stories)}
         for st in stories:
             st.current_vote = user_votes.get(st.id, "")
+
+    _attach_display_notes(stories)
 
     return {
         "room": room,
@@ -185,6 +208,8 @@ def _render_story(request, story: Story):
         v = Vote.objects.filter(story=s, participant=p).first()
         if v:
             s.current_vote = v.value
+
+    s.display_notes = _display_story_notes(s)
 
     return render(
         request,
@@ -440,6 +465,25 @@ def toggle_estimated_filter(request, code: str):
     return redirect("poker:room_detail", code=room.code)
 
 
+@require_POST
+def toggle_todo_tasks_filter(request, code: str):
+    room = get_object_or_404(Room, code=code)
+    participant = current_participant(request, room)
+    if not facilitator_required(participant):
+        return HttpResponseForbidden("Facilitator only")
+
+    room.show_todo_tasks_only = not room.show_todo_tasks_only
+    room.save(update_fields=["show_todo_tasks_only"])
+    invalidate_room_cache(room)
+
+    if room.show_todo_tasks_only:
+        messages.success(request, "Only To Do tasks/subtasks are now visible for this room.")
+    else:
+        messages.success(request, "All tasks/subtasks are now visible for this room.")
+
+    return redirect("poker:room_detail", code=room.code)
+
+
 def org_login(request):
     if request.session.get("org_email"):
         return redirect(_next_or_home(request))
@@ -679,6 +723,26 @@ def _extract_jira_estimate(fields: dict, estimation_field_id: str | None) -> str
     return _format_jira_estimate(fields.get(estimation_field_id))
 
 
+def _normalize_jira_status_category(value: str | None) -> str:
+    if not value:
+        return ""
+    return " ".join(str(value).strip().lower().split())
+
+
+def _extract_jira_status_category(fields: dict) -> str:
+    status = fields.get("status") or {}
+    if not isinstance(status, dict):
+        return ""
+    status_category = status.get("statusCategory") or {}
+    if isinstance(status_category, dict):
+        name = status_category.get("name") or ""
+    else:
+        name = status_category or ""
+    if not name:
+        name = status.get("name") or ""
+    return _normalize_jira_status_category(name)
+
+
 def _jira_next_sprint(room: Room, board_id: int) -> dict | None:
     auth = _jira_auth(room)
     if not auth:
@@ -711,24 +775,24 @@ def _jira_issues_in_sprint_for_project(
     room: Room,
     sprint_id: int,
     estimation_field_id: str | None = None,
-) -> list[tuple[str, str, str, str, str]]:
-    """Return [(KEY, summary, browse_url, issue_type, estimate)] filtered to room.jira_project_key."""
+) -> list[tuple[str, str, str, str, str, str]]:
+    """Return [(KEY, summary, browse_url, issue_type, estimate, status_category)] filtered to room.jira_project_key."""
     auth = _jira_auth(room)
     if not auth:
         return []
 
-    fields = {"summary", "issuetype", "project"}
+    fields_to_fetch = {"summary", "issuetype", "project", "status"}
     if estimation_field_id:
-        fields.add(estimation_field_id)
+        fields_to_fetch.add(estimation_field_id)
     if estimation_field_id in (None, "timeoriginalestimate", "timetracking"):
-        fields.update({"timeoriginalestimate", "timetracking"})
-    fields_param = ",".join(sorted(fields))
+        fields_to_fetch.update({"timeoriginalestimate", "timetracking"})
+    fields_param = ",".join(sorted(fields_to_fetch))
 
     # Preferred: JQL (REST v3)
     try:
         search_url = f"{room.jira_base_url}/rest/api/3/search"
         jql = f'project = "{room.jira_project_key}" AND sprint = {sprint_id}'
-        out: list[tuple[str, str, str, str, str]] = []
+        out: list[tuple[str, str, str, str, str, str]] = []
 
         def page(start_at: int):
             r = requests.get(
@@ -747,28 +811,30 @@ def _jira_issues_in_sprint_for_project(
 
         for issue in data.get("issues", []):
             key = issue.get("key", "")
-            fields = issue.get("fields", {}) or {}
-            summary = fields.get("summary", "")
+            issue_fields = issue.get("fields", {}) or {}
+            summary = issue_fields.get("summary", "")
             browse = f"{room.jira_base_url}/browse/{key}" if key else ""
-            issue_type = (fields.get("issuetype") or {}).get("name", "")
-            estimate = _extract_jira_estimate(fields, estimation_field_id)
+            issue_type = (issue_fields.get("issuetype") or {}).get("name", "")
+            estimate = _extract_jira_estimate(issue_fields, estimation_field_id)
+            status_category = _extract_jira_status_category(issue_fields)
             if _is_epic(issue_type):
                 continue
-            out.append((key, summary, browse, issue_type, estimate))
+            out.append((key, summary, browse, issue_type, estimate, status_category))
 
         while start_at + max_results < total:
             start_at += max_results
             data = page(start_at)
             for issue in data.get("issues", []):
                 key = issue.get("key", "")
-                fields = issue.get("fields", {}) or {}
-                summary = fields.get("summary", "")
+                issue_fields = issue.get("fields", {}) or {}
+                summary = issue_fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
-                issue_type = (fields.get("issuetype") or {}).get("name", "")
-                estimate = _extract_jira_estimate(fields, estimation_field_id)
+                issue_type = (issue_fields.get("issuetype") or {}).get("name", "")
+                estimate = _extract_jira_estimate(issue_fields, estimation_field_id)
+                status_category = _extract_jira_status_category(issue_fields)
                 if _is_epic(issue_type):
                     continue
-                out.append((key, summary, browse, issue_type, estimate))
+                out.append((key, summary, browse, issue_type, estimate, status_category))
 
         return out
 
@@ -777,7 +843,7 @@ def _jira_issues_in_sprint_for_project(
 
     # Fallback: Agile sprint issues (may include multiple projects) -> filter client-side
     issues_url = f"{room.jira_base_url}/rest/agile/1.0/sprint/{sprint_id}/issue"
-    filtered: list[tuple[str, str, str, str, str]] = []
+    filtered: list[tuple[str, str, str, str, str, str]] = []
     start = 0
     step = 50
     while True:
@@ -790,17 +856,18 @@ def _jira_issues_in_sprint_for_project(
         r.raise_for_status()
         data = r.json()
         for it in data.get("issues", []):
-            fields = it.get("fields", {}) or {}
-            project_key = (fields.get("project") or {}).get("key")
+            issue_fields = it.get("fields", {}) or {}
+            project_key = (issue_fields.get("project") or {}).get("key")
             if project_key == room.jira_project_key:
                 key = it.get("key", "")
-                summary = fields.get("summary", "")
+                summary = issue_fields.get("summary", "")
                 browse = f"{room.jira_base_url}/browse/{key}" if key else ""
-                issue_type = (fields.get("issuetype") or {}).get("name", "")
-                estimate = _extract_jira_estimate(fields, estimation_field_id)
+                issue_type = (issue_fields.get("issuetype") or {}).get("name", "")
+                estimate = _extract_jira_estimate(issue_fields, estimation_field_id)
+                status_category = _extract_jira_status_category(issue_fields)
                 if _is_epic(issue_type):
                     continue
-                filtered.append((key, summary, browse, issue_type, estimate))
+                filtered.append((key, summary, browse, issue_type, estimate, status_category))
         if start + data.get("maxResults", 0) >= data.get("total", 0):
             break
         start += data.get("maxResults", 0)
@@ -859,18 +926,22 @@ def jira_import_next_sprint(request, code: str):
             if issue_key:
                 jira_story_by_key[issue_key] = st
 
-        for key, summary, browse_url, issue_type, estimate in issues:
+        for key, summary, browse_url, issue_type, estimate, status_category in issues:
             title = f"{key} — {summary}"[:200]
             existing_story = jira_story_by_key.get(key)
             if existing_story:
                 fields_to_update = []
                 normalized_estimate = estimate or ""
+                normalized_status = status_category or ""
                 if normalized_estimate != (existing_story.jira_estimate or ""):
                     existing_story.jira_estimate = normalized_estimate
                     fields_to_update.append("jira_estimate")
                 if issue_type and issue_type != existing_story.jira_issue_type:
                     existing_story.jira_issue_type = issue_type
                     fields_to_update.append("jira_issue_type")
+                if normalized_status != (existing_story.jira_status_category or ""):
+                    existing_story.jira_status_category = normalized_status
+                    fields_to_update.append("jira_status_category")
                 if fields_to_update:
                     existing_story.save(update_fields=fields_to_update)
                     updated += 1
@@ -882,6 +953,7 @@ def jira_import_next_sprint(request, code: str):
                 notes=f"Issue: {key}\n{browse_url}",
                 jira_issue_type=issue_type or "",
                 jira_estimate=estimate or "",
+                jira_status_category=status_category or "",
             )
             created += 1
 

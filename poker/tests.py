@@ -87,6 +87,118 @@ class EstimateFilterTests(TestCase):
         self.assertNotContains(resp, "Has estimate")
 
 
+class TaskStatusFilterTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.room = Room.objects.create(name="Status Filter Room")
+        self.participant = Participant.objects.create(
+            room=self.room,
+            display_name="Facilitator",
+            is_facilitator=True,
+        )
+        session = self.client.session
+        session["org_email"] = "tester@welltech.com"
+        session[f"p_{self.room.code}"] = self.participant.id
+        session.save()
+
+    def test_done_tasks_hidden(self):
+        Story.objects.create(
+            room=self.room,
+            title="Task Done",
+            jira_issue_type="Task",
+            jira_status_category="done",
+        )
+        Story.objects.create(
+            room=self.room,
+            title="Subtask Done",
+            jira_issue_type="Sub-task",
+            jira_status_category="done",
+        )
+        Story.objects.create(
+            room=self.room,
+            title="Task Todo",
+            jira_issue_type="Task",
+            jira_status_category="to do",
+        )
+        Story.objects.create(
+            room=self.room,
+            title="Story Done",
+            jira_issue_type="Story",
+            jira_status_category="done",
+        )
+
+        resp = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
+        self.assertContains(resp, "Task Todo")
+        self.assertContains(resp, "Story Done")
+        self.assertNotContains(resp, "Task Done")
+        self.assertNotContains(resp, "Subtask Done")
+
+    def test_todo_tasks_only_respects_other_filters(self):
+        Story.objects.create(
+            room=self.room,
+            title="Todo Task",
+            jira_issue_type="Task",
+            jira_status_category="to do",
+        )
+        Story.objects.create(
+            room=self.room,
+            title="Todo Task Estimated",
+            jira_issue_type="Task",
+            jira_status_category="to do",
+            jira_estimate="3",
+        )
+        Story.objects.create(
+            room=self.room,
+            title="In Progress Task",
+            jira_issue_type="Task",
+            jira_status_category="in progress",
+        )
+        Story.objects.create(
+            room=self.room,
+            title="Story Todo",
+            jira_issue_type="Story",
+            jira_status_category="to do",
+        )
+
+        self.room.show_todo_tasks_only = True
+        self.room.hide_estimated_stories = True
+        self.room.save(update_fields=["show_todo_tasks_only", "hide_estimated_stories"])
+
+        resp = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
+        self.assertContains(resp, "Todo Task")
+        self.assertNotContains(resp, "Todo Task Estimated")
+        self.assertNotContains(resp, "In Progress Task")
+        self.assertNotContains(resp, "Story Todo")
+
+
+class StoryNotesDisplayTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.room = Room.objects.create(name="Notes Room")
+        self.participant = Participant.objects.create(
+            room=self.room,
+            display_name="Facilitator",
+            is_facilitator=True,
+        )
+        session = self.client.session
+        session["org_email"] = "tester@welltech.com"
+        session[f"p_{self.room.code}"] = self.participant.id
+        session.save()
+
+    def test_issue_line_replaced_with_status(self):
+        Story.objects.create(
+            room=self.room,
+            title="ABC-1 — Replace issue line",
+            notes="Issue: ABC-1\nhttps://jira.example/browse/ABC-1",
+            jira_issue_type="Task",
+            jira_status_category="in progress",
+        )
+
+        resp = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
+        self.assertContains(resp, "Status: In Progress")
+        self.assertNotContains(resp, "Issue: ABC-1")
+
+
 @override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
 class JiraImportTests(TestCase):
     def setUp(self):

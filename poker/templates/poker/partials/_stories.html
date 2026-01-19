@@ -10,6 +10,9 @@
       {% if room.hide_estimated_stories %}
         <span class="rounded-full bg-amber-100 px-3 py-1 text-amber-800">Estimated hidden</span>
       {% endif %}
+      {% if room.show_todo_tasks_only %}
+        <span class="rounded-full bg-amber-100 px-3 py-1 text-amber-800">To Do tasks only</span>
+      {% endif %}
     </div>
   </div>
 

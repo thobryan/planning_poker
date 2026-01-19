@@ -80,7 +80,7 @@
           <p class="text-xs uppercase tracking-[0.4em] text-amber-500">Filters</p>
           <h4 class="text-base font-semibold">Visibility rules</h4>
         </div>
-        {% if room.hide_estimated_stories %}
+        {% if room.hide_estimated_stories or room.show_todo_tasks_only %}
           <span class="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-semibold text-amber-900">On</span>
         {% endif %}
       </div>
@@ -94,6 +94,19 @@
         {% else %}
           <button class="w-full rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-amber-400/40 transition hover:bg-amber-700">
             Hide estimated issues
+          </button>
+        {% endif %}
+      </form>
+      <p class="mt-4 text-xs text-amber-800/80">Show only Jira tasks/subtasks that are still in To Do.</p>
+      <form method="post" action="{% url 'poker:toggle_todo_tasks_filter' room.code %}" class="mt-3">
+        {% csrf_token %}
+        {% if room.show_todo_tasks_only %}
+          <button class="w-full rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800">
+            Show all tasks
+          </button>
+        {% else %}
+          <button class="w-full rounded-2xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-amber-400/40 transition hover:bg-amber-700">
+            Show only To Do tasks
           </button>
         {% endif %}
       </form>
