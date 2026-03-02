@@ -199,6 +199,29 @@ class StoryNotesDisplayTests(TestCase):
         self.assertNotContains(resp, "Issue: ABC-1")
 
 
+class ConsensusInputPreserveTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.room = Room.objects.create(name="Consensus Room")
+        self.participant = Participant.objects.create(
+            room=self.room,
+            display_name="Facilitator",
+            is_facilitator=True,
+        )
+        session = self.client.session
+        session["org_email"] = "tester@welltech.com"
+        session[f"p_{self.room.code}"] = self.participant.id
+        session.save()
+
+    def test_revealed_story_consensus_input_is_htmx_preserved(self):
+        story = Story.objects.create(room=self.room, title="Story for consensus", revealed=True)
+
+        resp = self.client.get(reverse("poker:room_detail", args=[self.room.code]))
+        page = resp.content.decode()
+        self.assertIn("hx-preserve", page)
+        self.assertIn(f'id="consensus-input-{story.id}"', page)
+
+
 @override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
 class JiraSettingsViewTests(TestCase):
     def setUp(self):

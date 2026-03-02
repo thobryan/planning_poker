@@ -84,7 +84,7 @@
                 hx-target="#story-{{ s.id }}" hx-swap="outerHTML"
                 class="mt-4 flex flex-wrap items-center gap-2 text-sm">
             {% csrf_token %}
-            <input type="text" name="consensus" placeholder="Set consensus (e.g., 5)"
+            <input id="consensus-input-{{ s.id }}" hx-preserve type="text" name="consensus" placeholder="Set consensus (e.g., 5)"
                    class="w-40 rounded-2xl border border-slate-300 px-3 py-1.5 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/30" />
             <button class="rounded-2xl bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white shadow hover:bg-emerald-700">
               Save
