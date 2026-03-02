@@ -617,17 +617,10 @@ def _jira_auth(room: Room) -> HTTPBasicAuth | None:
     return HTTPBasicAuth(room.jira_email, room.jira_token)
 
 
-def _jira_get_board_id(room: Room) -> int | None:
-    """
-    Prefer a board whose location.projectKey == room.jira_project_key.
-    Fall back to first matching board.
-    """
-    if room.jira_board_id:
-        return room.jira_board_id
-
+def _jira_boards_for_project(room: Room) -> list[dict]:
     auth = _jira_auth(room)
     if not auth or not room.jira_project_key:
-        return None
+        return []
 
     url = f"{room.jira_base_url}/rest/agile/1.0/board"
     boards: list[dict] = []
@@ -640,11 +633,32 @@ def _jira_get_board_id(room: Room) -> int | None:
             timeout=15,
         )
         r.raise_for_status()
-        data = r.json()
-        boards.extend(data.get("values", []))
-        if start_at + data.get("maxResults", 0) >= data.get("total", 0):
+        data = r.json() or {}
+        values = data.get("values", [])
+        boards.extend(values)
+
+        page_size = data.get("maxResults") or len(values)
+        total = data.get("total") or len(boards)
+        if start_at + page_size >= total or page_size == 0:
             break
-        start_at += data.get("maxResults", 0)
+        start_at += page_size
+
+    return boards
+
+
+def _jira_get_board_id(room: Room) -> int | None:
+    """
+    Prefer a board whose location.projectKey == room.jira_project_key.
+    Fall back to first matching board.
+    """
+    if room.jira_board_id:
+        return room.jira_board_id
+
+    auth = _jira_auth(room)
+    if not auth or not room.jira_project_key:
+        return None
+
+    boards = _jira_boards_for_project(room)
 
     if not boards:
         return None
@@ -887,7 +901,40 @@ def jira_settings(request, code: str):
             return redirect("poker:room_detail", code=room.code)
     else:
         form = JiraSettingsForm(instance=room)
-    return render(request, "poker/jira_settings.html", {"room": room, "form": form, "participant": participant})
+
+    available_boards: list[dict[str, int | str]] = []
+    board_lookup_error = ""
+    if room.jira_base_url and room.jira_email and room.jira_token and room.jira_project_key:
+        try:
+            for board in _jira_boards_for_project(room):
+                board_id = board.get("id")
+                if board_id is None:
+                    continue
+                available_boards.append(
+                    {
+                        "id": board_id,
+                        "name": (board.get("name") or "").strip() or "Unnamed board",
+                    }
+                )
+            available_boards.sort(key=lambda item: (str(item["name"]).lower(), int(item["id"])))
+        except requests.RequestException as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            if status_code:
+                board_lookup_error = f"Could not load boards from Jira (HTTP {status_code})."
+            else:
+                board_lookup_error = "Could not load boards from Jira."
+
+    return render(
+        request,
+        "poker/jira_settings.html",
+        {
+            "room": room,
+            "form": form,
+            "participant": participant,
+            "available_boards": available_boards,
+            "board_lookup_error": board_lookup_error,
+        },
+    )
 
 
 @require_POST

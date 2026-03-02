@@ -200,6 +200,49 @@ class StoryNotesDisplayTests(TestCase):
 
 
 @override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
+class JiraSettingsViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.room = Room.objects.create(
+            name="Jira Settings Room",
+            jira_base_url="https://jira.example",
+            jira_email="jira@example.com",
+            jira_token="token",
+            jira_project_key="ABC",
+        )
+        self.participant = Participant.objects.create(
+            room=self.room,
+            display_name="Facilitator",
+            is_facilitator=True,
+        )
+        session = self.client.session
+        session["org_email"] = "tester@welltech.com"
+        session[f"p_{self.room.code}"] = self.participant.id
+        session.save()
+
+    @patch("poker.views.requests.get")
+    def test_settings_page_lists_available_boards(self, mock_get):
+        mock_get.return_value = _StubResponse(
+            {
+                "startAt": 0,
+                "maxResults": 50,
+                "total": 2,
+                "values": [
+                    {"id": 12, "name": "Team Alpha board", "location": {"projectKey": "ABC"}},
+                    {"id": 34, "name": "Team Beta board", "location": {"projectKey": "ABC"}},
+                ],
+            }
+        )
+
+        resp = self.client.get(reverse("poker:jira_settings", args=[self.room.code]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Team Alpha board")
+        self.assertContains(resp, "ID 12")
+        self.assertContains(resp, "Team Beta board")
+        self.assertContains(resp, "ID 34")
+
+
+@override_settings(JIRA_TOKEN_ENCRYPTION_KEY=TEST_FERNET_KEY)
 class JiraImportTests(TestCase):
     def setUp(self):
         self.client = Client()

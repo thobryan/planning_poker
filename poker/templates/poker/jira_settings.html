@@ -33,5 +33,27 @@
       </a>
     </div>
   </form>
+
+  <section class="mt-8 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+    <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-700">Available Boards</h3>
+    <p class="mt-1 text-xs text-slate-500">Boards visible to project <span class="font-mono">{{ room.jira_project_key|default:"-" }}</span>.</p>
+
+    {% if board_lookup_error %}
+      <p class="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">{{ board_lookup_error }}</p>
+    {% elif available_boards %}
+      <ul class="mt-3 space-y-2">
+        {% for board in available_boards %}
+          <li class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+            <span class="text-slate-800">{{ board.name }}</span>
+            <code class="rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">ID {{ board.id }}</code>
+          </li>
+        {% endfor %}
+      </ul>
+    {% elif room.jira_base_url and room.jira_email and room.jira_token and room.jira_project_key %}
+      <p class="mt-3 text-sm text-slate-600">No boards found for this project.</p>
+    {% else %}
+      <p class="mt-3 text-sm text-slate-600">Save Jira base URL, email, API token, and project key to load board IDs.</p>
+    {% endif %}
+  </section>
 </div>
 {% endblock %}
